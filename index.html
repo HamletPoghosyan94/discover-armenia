@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discover Armenia — Destinations Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/osmtogeojson@3.0.0-beta.5/osmtogeojson.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f5f5; color: #222; height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Header ── */
+  #header {
+    background: linear-gradient(135deg, #c0392b 0%, #96281b 100%);
+    border-bottom: 3px solid #922b21;
+    padding: 10px 16px;
+    display: flex; align-items: center; gap: 14px; flex-shrink: 0;
+  }
+  #header h1 { font-size: 1.2rem; font-weight: 700; color: #fff; letter-spacing: 0.5px; }
+  #header h1 span { color: #fde68a; }
+  #dest-count { background: rgba(255,255,255,0.25); color: #fff; font-size: 0.72rem; font-weight: 700;
+    padding: 2px 8px; border-radius: 12px; margin-left: 4px; border: 1px solid rgba(255,255,255,0.4); }
+
+  /* ── Controls bar ── */
+  #controls {
+    background: #fff;
+    border-bottom: 1px solid #ddd;
+    padding: 8px 14px;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px; flex-shrink: 0;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  #controls label { font-size: 0.72rem; color: #888; margin-right: 2px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+
+  .filter-btn {
+    border: none; border-radius: 14px; padding: 4px 11px; font-size: 0.73rem; font-weight: 600;
+    cursor: pointer; transition: all 0.15s; white-space: nowrap; opacity: 0.4;
+  }
+  .filter-btn.active { opacity: 1; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
+  .filter-btn:hover { opacity: 0.8; }
+
+  .sep { width: 1px; height: 22px; background: #e0e0e0; margin: 0 4px; flex-shrink: 0; }
+
+  #prov-select {
+    background: #f5f5f5; color: #444; border: 1px solid #ccc;
+    border-radius: 8px; padding: 4px 8px; font-size: 0.73rem; cursor: pointer;
+  }
+  #clear-btn {
+    background: #f0f0f0; color: #666; border: 1px solid #ddd; border-radius: 8px;
+    padding: 4px 10px; font-size: 0.73rem; cursor: pointer; margin-left: auto;
+  }
+  #clear-btn:hover { background: #e0e0e0; color: #333; }
+
+  /* ── Map ── */
+  #map { flex: 1; }
+
+  /* ── Popup ── */
+  .leaflet-popup-content-wrapper {
+    background: #fff; border: 1px solid #e0e0e0; border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  }
+  .leaflet-popup-tip { background: #fff; }
+  .leaflet-popup-content { margin: 0; width: 280px !important; }
+
+  .popup-inner { padding: 12px 14px; }
+  .popup-cat {
+    display: inline-block; font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.6px; border-radius: 10px; padding: 2px 8px; margin-bottom: 6px;
+  }
+  .popup-name { font-size: 0.98rem; font-weight: 700; color: #1a1a1a; margin-bottom: 8px; line-height: 1.3; }
+  .popup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; margin-bottom: 8px; }
+  .popup-grid div { font-size: 0.72rem; }
+  .popup-grid .lbl { color: #999; }
+  .popup-grid .val { color: #333; font-weight: 600; }
+  .popup-notes { font-size: 0.72rem; color: #555; line-height: 1.45; border-top: 1px solid #eee; padding-top: 7px; }
+
+  /* ── Legend ── */
+  #legend {
+    position: absolute; bottom: 26px; right: 10px; z-index: 1000;
+    background: rgba(255,255,255,0.95); border: 1px solid #ddd;
+    border-radius: 10px; padding: 10px 12px; font-size: 0.72rem;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+  }
+  #legend h4 { color: #888; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.65rem; margin-bottom: 7px; }
+  .legend-row { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; color: #444; }
+  .legend-icon {
+    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; line-height: 1;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+
+  /* ── Marz tooltip ── */
+  .marz-tooltip {
+    background: rgba(255,255,255,0.92); border: 1px solid #ccc;
+    border-radius: 6px; padding: 4px 8px; font-size: 0.78rem;
+    font-weight: 700; color: #333; box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    pointer-events: none;
+  }
+  .marz-tooltip::before { display: none; }
+
+  /* ── Counter ── */
+  #map-counter {
+    position: absolute; top: 10px; right: 10px; z-index: 1000;
+    background: rgba(255,255,255,0.92); border: 1px solid #ddd;
+    border-radius: 8px; padding: 5px 10px; font-size: 0.75rem; color: #777;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+  }
+  #map-counter span { color: #222; font-weight: 700; }
+
+  /* ── Theme switcher ── */
+  #theme-switcher {
+    position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 1000;
+    display: flex; gap: 3px;
+    background: rgba(255,255,255,0.96); border: 1px solid #ddd;
+    border-radius: 10px; padding: 5px 7px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.13);
+    white-space: nowrap;
+  }
+  .theme-btn {
+    border: none; border-radius: 7px; padding: 5px 11px;
+    font-size: 0.72rem; font-weight: 600; cursor: pointer;
+    background: transparent; color: #555;
+    transition: all 0.15s;
+  }
+  .theme-btn:hover { background: #f0f0f0; color: #222; }
+  .theme-btn.active { background: #c0392b; color: #fff; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>🗺 <span>Discover</span> Armenia</h1>
+  <div id="dest-count">94 destinations</div>
+</div>
+
+<div id="controls">
+  <label>Category:</label>
+  <button class="filter-btn active" data-cat="ALL" style="background:#e94560;color:#fff;">All</button>
+  <button class="filter-btn" data-cat="Mountains &amp; Peaks"    style="background:#4a90d9;color:#fff;">⛰ Mountains</button>
+  <button class="filter-btn" data-cat="Lakes &amp; Rivers"       style="background:#27ae60;color:#fff;">💧 Lakes &amp; Rivers</button>
+  <button class="filter-btn" data-cat="Waterfalls"               style="background:#1abc9c;color:#fff;">🌊 Waterfalls</button>
+  <button class="filter-btn" data-cat="Castles &amp; Fortresses" style="background:#e67e22;color:#fff;">🏰 Castles</button>
+  <button class="filter-btn" data-cat="Caves"                    style="background:#9b59b6;color:#fff;">🪨 Caves</button>
+  <button class="filter-btn" data-cat="Archaeological Sites"     style="background:#c0a020;color:#fff;">🏛 Archaeology</button>
+  <button class="filter-btn" data-cat="Camping Spots"            style="background:#2ecc71;color:#1a1a2e;">⛺ Camping</button>
+  <button class="filter-btn" data-cat="Viewpoints"               style="background:#e07040;color:#fff;">👁 Viewpoints</button>
+  <div class="sep"></div>
+  <label>Province:</label>
+  <select id="prov-select">
+    <option value="ALL">All provinces</option>
+    <option>Aragatsotn</option>
+    <option>Ararat</option>
+    <option>Artsakh</option>
+    <option>Gegharkunik</option>
+    <option>Gegharkunik/Kotayk</option>
+    <option>Kotayk</option>
+    <option>Lori</option>
+    <option>Shirak</option>
+    <option>Syunik</option>
+    <option>Tavush</option>
+    <option>Vayots Dzor</option>
+    <option>Yerevan</option>
+  </select>
+  <button id="clear-btn">✕ Reset filters</button>
+</div>
+
+<div style="position:relative;flex:1;display:flex;flex-direction:column;">
+  <div id="map"></div>
+  <div id="map-counter">Showing <span id="vis-count">94</span> of 94</div>
+  <div id="theme-switcher">
+    <button class="theme-btn active" data-theme="relief">🏔 Relief</button>
+    <button class="theme-btn" data-theme="topo">📐 Topo</button>
+    <button class="theme-btn" data-theme="satellite">🛰 Satellite</button>
+    <button class="theme-btn" data-theme="outdoor">🥾 Outdoor</button>
+    <button class="theme-btn" data-theme="street">🗺 Street</button>
+  </div>
+  <div id="marz-status" style="position:absolute;bottom:6px;left:10px;z-index:1000;background:rgba(255,255,255,0.9);border:1px solid #ddd;border-radius:6px;padding:4px 10px;font-size:0.7rem;color:#666;box-shadow:0 1px 4px rgba(0,0,0,0.1);">⏳ Loading province borders from OSM…</div>
+  <div id="legend">
+    <h4>Categories</h4>
+    <div class="legend-row"><div class="legend-icon" style="background:#4a90d9">⛰</div>Mountains &amp; Peaks</div>
+    <div class="legend-row"><div class="legend-icon" style="background:#27ae60">💧</div>Lakes &amp; Rivers</div>
+    <div class="legend-row"><div class="legend-icon" style="background:#1abc9c">💦</div>Waterfalls</div>
+    <div class="legend-row"><div class="legend-icon" style="background:#e67e22">🏰</div>Castles &amp; Fortresses</div>
+    <div class="legend-row"><div class="legend-icon" style="background:#9b59b6">🕳</div>Caves</div>
+    <div class="legend-row"><div class="legend-icon" style="background:#c0a020">🏛</div>Archaeological Sites</div>
+    <div class="legend-row"><div class="legend-icon" style="background:#2ecc71">⛺</div>Camping Spots</div>
+    <div class="legend-row"><div class="legend-icon" style="background:#e07040">👁</div>Viewpoints</div>
+  </div>
+</div>
+
+<script>
+// ── Destination data ──────────────────────────────────────────────────────────
+const DESTINATIONS = [{"name":"Mount Aragats (North Peak)","category":"Mountains & Peaks","province":"Aragatsotn","lat":40.536,"lon":44.198,"elevation":4090,"difficulty":"Hard","season":"Jun–Sep","notes":"Highest peak in Armenia. Requires good fitness. Crater lake visible from summit.","source":"ArmGeo (armgeo.am), Armland (armland.am), We Hike Armenia (wehike.am), Armenian Explorer (armenianexplorer.com)"},{"name":"Mount Aragats (South Peak)","category":"Mountains & Peaks","province":"Aragatsotn","lat":40.528,"lon":44.204,"elevation":3879,"difficulty":"Medium","season":"Jun–Oct","notes":"Most accessible Aragats peak. Start from Lake Kari (3200m). 5.5 km hike, 688m gain.","source":"ArmGeo (armgeo.am), Armland (armland.am), We Hike Armenia (wehike.am), Armenian Explorer (armenianexplorer.com)"},{"name":"Mount Aragats (West Peak)","category":"Mountains & Peaks","province":"Aragatsotn","lat":40.531,"lon":44.186,"elevation":4080,"difficulty":"Hard","season":"Jun–Sep","notes":"Second highest peak of Aragats massif. Technical section near summit.","source":"Armland (armland.am), We Hike Armenia (wehike.am)"},{"name":"Mount Aragats (East Peak)","category":"Mountains & Peaks","province":"Aragatsotn","lat":40.534,"lon":44.213,"elevation":3916,"difficulty":"Hard","season":"Jun–Sep","notes":"Least visited of the four Aragats peaks.","source":"Armland (armland.am)"},{"name":"Mount Azhdahak","category":"Mountains & Peaks","province":"Gegharkunik","lat":40.157,"lon":45.082,"elevation":3597,"difficulty":"Medium","season":"Jun–Oct","notes":"Dormant volcano with a stunning crater lake at the summit. One of the most popular hikes in Armenia. Geghama Ridge.","source":"ArmGeo (armgeo.am), Armland (armland.am), We Hike Armenia (wehike.am), Armenian Explorer (armenianexplorer.com)"},{"name":"Mount Ara","category":"Mountains & Peaks","province":"Kotayk","lat":40.297,"lon":44.718,"elevation":2577,"difficulty":"Medium","season":"Apr–Oct","notes":"Named after legendary Armenian king Ara the Beautiful. Visible from Yerevan on clear days.","source":"ArmGeo (armgeo.am)"},{"name":"Volcano Vayotssar","category":"Mountains & Peaks","province":"Vayots Dzor","lat":39.833,"lon":45.5,"elevation":2992,"difficulty":"Medium","season":"May–Oct","notes":"Extinct volcano. Panoramic views over Vayots Dzor valley. Also spelled Vayotzsar.","source":"ArmGeo (armgeo.am), Armland (armland.am)"},{"name":"Mount Dimats","category":"Mountains & Peaks","province":"Tavush","lat":40.828,"lon":44.944,"elevation":2023,"difficulty":"Easy/Medium","season":"Apr–Oct","notes":"Located near Dilijan. One of the most popular weekend hikes from Yerevan. 18 km route, 1000m gain.","source":"ArmGeo (armgeo.am), We Hike Armenia (wehike.am), Armenian Explorer (armenianexplorer.com)"},{"name":"Mount Tesilk","category":"Mountains & Peaks","province":"Tavush","lat":40.883,"lon":45.177,"elevation":1372,"difficulty":"Easy","season":"Apr–Oct","notes":"Near Ijevan. Good beginner hike with a cave at the top. Popular local destination.","source":"ArmGeo (armgeo.am), We Hike Armenia (wehike.am)"},{"name":"Mount Apakekar","category":"Mountains & Peaks","province":"Tavush","lat":40.757,"lon":44.965,"elevation":2144,"difficulty":"Medium","season":"May–Oct","notes":"Inside Dilijan National Park. Dense forest trail. Requires navigation skills.","source":"ArmGeo (armgeo.am), We Hike Armenia (wehike.am)"},{"name":"Mount Ayrikar","category":"Mountains & Peaks","province":"Tavush","lat":40.77,"lon":44.97,"elevation":1943,"difficulty":"Medium","season":"May–Oct","notes":"In Dilijan National Park. Good forest views. Less visited than Apakekar.","source":"ArmGeo (armgeo.am)"},{"name":"Mount Artanish","category":"Mountains & Peaks","province":"Gegharkunik","lat":40.283,"lon":45.116,"elevation":2754,"difficulty":"Medium","season":"May–Oct","notes":"Only peak from which the entire Lake Sevan is visible. Often combined with Sevanavank visit.","source":"ArmGeo (armgeo.am), We Hike Armenia (wehike.am), Armenian Explorer (armenianexplorer.com)"},{"name":"Mount Khustup","category":"Mountains & Peaks","province":"Syunik","lat":38.961,"lon":46.286,"elevation":3206,"difficulty":"Hard","season":"Jun–Sep","notes":"One of the most challenging day hikes in Armenia. 12 km route, 1200m elevation gain from Verin Vachagan.","source":"ArmGeo (armgeo.am), We Hike Armenia (wehike.am)"},{"name":"Mount Spitakasar","category":"Mountains & Peaks","province":"Syunik","lat":39.498,"lon":46.001,"elevation":3560,"difficulty":"Hard","season":"Jun–Sep","notes":"High volcanic peak in Syunik range. Remote and less visited.","source":"We Hike Armenia (wehike.am)"},{"name":"Mount Sevazhayr","category":"Mountains & Peaks","province":"Syunik","lat":39.402,"lon":46.109,"elevation":3320,"difficulty":"Hard","season":"Jun–Sep","notes":"Challenging peak in southern Syunik. Requires good physical condition.","source":"We Hike Armenia (wehike.am)"},{"name":"Mount Ampasar","category":"Mountains & Peaks","province":"Gegharkunik","lat":40.203,"lon":45.21,"elevation":2928,"difficulty":"Medium","season":"May–Sep","notes":"Famous for wild rhododendron blooms in late spring. Geghama ridge.","source":"We Hike Armenia (wehike.am)"},{"name":"Mount Mets Parakhadem","category":"Mountains & Peaks","province":"Syunik","lat":39.612,"lon":46.201,"elevation":2912,"difficulty":"Medium","season":"May–Oct","notes":"Near cave villages of Syunik. Often combined with visit to Khndzoresk cave village.","source":"ArmGeo (armgeo.am)"},{"name":"Mount Abul","category":"Mountains & Peaks","province":"Syunik","lat":39.903,"lon":45.821,"elevation":3304,"difficulty":"Hard","season":"Jun–Sep","notes":"Extinct volcanic summit on the Armenia-Georgia border area.","source":"We Hike Armenia (wehike.am)"},{"name":"Mount Teghenis","category":"Mountains & Peaks","province":"Aragatsotn","lat":40.393,"lon":44.352,"elevation":2851,"difficulty":"Medium","season":"May–Sep","notes":"Southwest of Aragats massif. Less crowded alternative to Aragats.","source":"We Hike Armenia (wehike.am)"},{"name":"Mount Miapor","category":"Mountains & Peaks","province":"Gegharkunik","lat":40.152,"lon":45.154,"elevation":3104,"difficulty":"Hard","season":"Jun–Sep","notes":"On the Geghama Ridge. Panoramic views of Lake Sevan and surrounding volcanoes.","source":"We Hike Armenia (wehike.am)"},{"name":"Mount Gutanasar","category":"Mountains & Peaks","province":"Kotayk","lat":40.203,"lon":44.772,"elevation":2294,"difficulty":"Medium","season":"Apr–Oct","notes":"Extinct volcano. Easily accessible from Yerevan (1.5 hrs). Often done as sunset hike.","source":"We Hike Armenia (wehike.am)"},{"name":"Mount Yeranos","category":"Mountains & Peaks","province":"Vayots Dzor","lat":39.881,"lon":45.184,"elevation":2852,"difficulty":"Medium","season":"May–Oct","notes":"Known for the famous Pink Gorge on its slopes. Strong pinkish-red rock coloring. Near Smbataberd fortress.","source":"ArmGeo (armgeo.am), We Hike Armenia (wehike.am)"},{"name":"Qarkatar & Mknasar Peaks","category":"Mountains & Peaks","province":"Gegharkunik","lat":40.104,"lon":45.298,"elevation":3180,"difficulty":"Hard","season":"Jun–Sep","notes":"Two volcanic peaks on Geghama Ridge. Multi-peak traverse route. Less known to tourists.","source":"We Hike Armenia (wehike.am)"},{"name":"Mount Artavaz","category":"Mountains & Peaks","province":"Kotayk","lat":40.218,"lon":44.795,"elevation":2522,"difficulty":"Medium","season":"May–Oct","notes":"Features a 'relict circus' — glacial cirque formation unique in Armenia.","source":"We Hike Armenia (wehike.am)"},{"name":"Geghama Ridge (7 Volcanoes)","category":"Mountains & Peaks","province":"Gegharkunik/Kotayk","lat":40.16,"lon":45.1,"elevation":3500,"difficulty":"Hard","season":"Jun–Sep","notes":"Multi-day traverse across 7 volcanic peaks. One of Armenia's best multi-day routes.","source":"We Hike Armenia (wehike.am)"},{"name":"Mount Geghasar","category":"Mountains & Peaks","province":"Gegharkunik","lat":40.183,"lon":45.1,"elevation":2743,"difficulty":"Medium","season":"May–Oct","notes":"On the Geghama Ridge. Good starting point for Geghama traverse.","source":"We Hike Armenia (wehike.am)"},{"name":"Wolf's Ears (Vardablur)","category":"Mountains & Peaks","province":"Lori","lat":41.018,"lon":44.51,"elevation":2605,"difficulty":"Medium","season":"May–Oct","notes":"Two distinctive rocky peaks resembling wolf ears. Popular photogenic destination in Lori.","source":"We Hike Armenia (wehike.am)"},{"name":"Pambak Range 3000m Peaks (Tezhler)","category":"Mountains & Peaks","province":"Lori","lat":40.918,"lon":44.53,"elevation":3010,"difficulty":"Hard","season":"Jun–Sep","notes":"Multi-peak traverse in Pambak range. Three 3000m+ summits in one route.","source":"We Hike Armenia (wehike.am)"},{"name":"Mount Mets Maymekh","category":"Mountains & Peaks","province":"Syunik","lat":39.502,"lon":46.02,"elevation":3010,"difficulty":"Hard","season":"Jun–Sep","notes":"Remote peak in the Zangezur range. Off the beaten path.","source":"We Hike Armenia (wehike.am)"},{"name":"Lake Rapi (Aragats Lakes)","category":"Lakes & Rivers","province":"Aragatsotn","lat":40.493,"lon":44.17,"elevation":3255,"difficulty":"Medium","season":"Jun–Sep","notes":"High-altitude lakes on Aragats plateau: Rapi, Mtnalich, Astghkan. Stunning alpine scenery.","source":"ArmGeo (armgeo.am), Armland (armland.am), We Hike Armenia (wehike.am)"},{"name":"Lake Tsakkar","category":"Lakes & Rivers","province":"Gegharkunik","lat":40.3,"lon":45.1,"elevation":2900,"difficulty":"Medium","season":"Jun–Sep","notes":"Remote alpine lake on Geghama Ridge. 2-day trekking required. Pristine and rarely visited.","source":"Armland (armland.am)"},{"name":"Lake Sevan (Artanish Peninsula)","category":"Lakes & Rivers","province":"Gegharkunik","lat":40.305,"lon":45.275,"elevation":1900,"difficulty":"Easy","season":"Apr–Oct","notes":"Largest lake in Armenia. Artanish area offers sea buckthorn picking and sauna. Sevanavank visible from hike.","source":"We Hike Armenia (wehike.am), Armenian Explorer (armenianexplorer.com)"},{"name":"Lake Parz","category":"Lakes & Rivers","province":"Tavush","lat":40.775,"lon":45.075,"elevation":1334,"difficulty":"Easy","season":"Apr–Oct","notes":"Clear forest lake in Dilijan National Park. Starting point of Parz Lake–Goshavank trail (6.5 km).","source":"ArmGeo (armgeo.am), Armenian Explorer (armenianexplorer.com)"},{"name":"Jermuk Geyser (Mermaid's Hair)","category":"Lakes & Rivers","province":"Vayots Dzor","lat":39.844,"lon":45.674,"elevation":2010,"difficulty":"Easy","season":"May–Oct","notes":"Natural geyser and mineral water springs near Jermuk resort town. Unique geological feature.","source":"ArmGeo (armgeo.am)"},{"name":"Azat Gorge","category":"Lakes & Rivers","province":"Ararat","lat":40.052,"lon":44.642,"elevation":980,"difficulty":"Medium","season":"Apr–Oct","notes":"Deep gorge carved by Azat River. Leads to Geghard Monastery area. Good spring hike.","source":"We Hike Armenia (wehike.am)"},{"name":"Gnishik Canyon","category":"Lakes & Rivers","province":"Vayots Dzor","lat":39.712,"lon":45.506,"elevation":1820,"difficulty":"Medium","season":"May–Oct","notes":"Spectacular narrow canyon in Vayots Dzor. Colorful rock formations. Less visited gem.","source":"We Hike Armenia (wehike.am)"},{"name":"Vorotan Gorge","category":"Lakes & Rivers","province":"Syunik","lat":39.408,"lon":46.215,"elevation":1500,"difficulty":"Medium","season":"May–Oct","notes":"Deep gorge on the Vorotan River. Dramatic views of Tatev Monastery. Near Tatev cable car.","source":"ArmGeo (armgeo.am)"},{"name":"Kotur Mineral Spring","category":"Lakes & Rivers","province":"Vayots Dzor","lat":39.802,"lon":45.402,"elevation":1620,"difficulty":"Easy","season":"Apr–Oct","notes":"Natural carbonated mineral water spring in Ararat Valley foothills. Good picnic spot.","source":"We Hike Armenia (wehike.am)"},{"name":"Arevatsag Canyon (Lori)","category":"Lakes & Rivers","province":"Lori","lat":41.019,"lon":44.623,"elevation":1050,"difficulty":"Medium","season":"Apr–Oct","notes":"River canyon in Lori region. Dense forest. Good for single-day trail in north Armenia.","source":"We Hike Armenia (wehike.am)"},{"name":"Trchkan Waterfall","category":"Waterfalls","province":"Shirak","lat":41.154,"lon":43.886,"elevation":1705,"difficulty":"Easy","season":"Apr–Oct","notes":"One of the largest waterfalls in Armenia (23m). Located near Ujan village. Accessible by car.","source":"We Hike Armenia (wehike.am)"},{"name":"Mantash Waterfall","category":"Waterfalls","province":"Aragatsotn","lat":40.398,"lon":43.921,"elevation":1820,"difficulty":"Easy/Medium","season":"May–Sep","notes":"Seasonal waterfall in Aragatsotn. Best visited in spring/early summer when snowmelt is strongest.","source":"We Hike Armenia (wehike.am)"},{"name":"Vahagn and Astghik Waterfalls","category":"Waterfalls","province":"Ararat","lat":40.053,"lon":44.701,"elevation":1380,"difficulty":"Medium","season":"Apr–Oct","notes":"Twin waterfalls inside Khosrov Forest Reserve near Havuts Tar monastery ruins.","source":"ArmGeo (armgeo.am)"},{"name":"Barberry Gorge / Alsar Waterfalls","category":"Waterfalls","province":"Vayots Dzor","lat":39.812,"lon":45.398,"elevation":1800,"difficulty":"Medium","season":"Apr–Jun","notes":"Beautiful spring flowering gorge in Ararat Valley region. Waterfall and barberry bushes in bloom.","source":"We Hike Armenia (wehike.am)"},{"name":"Smbataberd Fortress","category":"Castles & Fortresses","province":"Vayots Dzor","lat":39.875,"lon":45.205,"elevation":2200,"difficulty":"Medium","season":"Apr–Oct","notes":"5th century fortress on a dramatic cliff. Combined often with Tsaghats Kar monastery and Zorats Church.","source":"ArmGeo (armgeo.am), We Hike Armenia (wehike.am), Armenian Explorer (armenianexplorer.com)"},{"name":"Amberd Fortress","category":"Castles & Fortresses","province":"Aragatsotn","lat":40.445,"lon":44.225,"elevation":2297,"difficulty":"Medium","season":"Apr–Oct","notes":"7th-10th century fortress-church on the slopes of Aragats. One of best-preserved medieval fortresses.","source":"We Hike Armenia (wehike.am)"},{"name":"Havuts Tar (Khosrov Forest)","category":"Castles & Fortresses","province":"Ararat","lat":40.071,"lon":44.703,"elevation":1480,"difficulty":"Medium","season":"Apr–Oct","notes":"Ruined 13th century monastery complex inside Khosrov Forest Reserve. Archaeological site.","source":"ArmGeo (armgeo.am)"},{"name":"Tatev Monastery (hike approach)","category":"Castles & Fortresses","province":"Syunik","lat":39.382,"lon":46.261,"elevation":1197,"difficulty":"Medium","season":"Apr–Oct","notes":"9th century monastery on cliff edge above Vorotan Gorge. Reached by world's longest cable car or hiking trail.","source":"We Hike Armenia (wehike.am)"},{"name":"Hell's Canyon (Syunik fortresses area)","category":"Castles & Fortresses","province":"Syunik","lat":39.405,"lon":46.303,"elevation":1400,"difficulty":"Hard","season":"May–Oct","notes":"Deep gorge combined with ascent of Mt. Tezhkar. Remote southern Syunik. Medieval defensive structures.","source":"We Hike Armenia (wehike.am)"},{"name":"Lastiver Cave","category":"Caves","province":"Tavush","lat":40.904,"lon":45.219,"elevation":890,"difficulty":"Medium","season":"Apr–Oct","notes":"Large cave complex near Ijevan. Forest waterfall approach. Overnight cave stays possible. Fairy-tale setting.","source":"ArmGeo (armgeo.am), We Hike Armenia (wehike.am)"},{"name":"Yerevan Salt Mine (Speleo Hike)","category":"Caves","province":"Kotayk","lat":40.148,"lon":44.555,"elevation":900,"difficulty":"Easy","season":"Year-round","notes":"Underground salt mine turned speleo tourism site near Yerevan. Unusual urban adventure.","source":"We Hike Armenia (wehike.am)"},{"name":"Cave Villages of Syunik (Khndzoresk area)","category":"Caves","province":"Syunik","lat":39.612,"lon":46.18,"elevation":1820,"difficulty":"Medium","season":"Apr–Oct","notes":"Ancient cave dwelling villages carved into cliffs. Inhabited until 1950s. UNESCO candidate.","source":"ArmGeo (armgeo.am)"},{"name":"Goshavank Monastery","category":"Archaeological Sites","province":"Tavush","lat":40.787,"lon":45.107,"elevation":1094,"difficulty":"Easy","season":"Apr–Oct","notes":"12th century monastery. Endpoint of Parz Lake trail. Known for khachkars and medieval library.","source":"ArmGeo (armgeo.am), Armenian Explorer (armenianexplorer.com)"},{"name":"Tsaghats Kar Monastic Complex","category":"Archaeological Sites","province":"Vayots Dzor","lat":39.862,"lon":45.217,"elevation":2200,"difficulty":"Medium","season":"May–Oct","notes":"13th century monastery on rocky hillside. Often combined with Smbataberd fortress hike.","source":"Armenian Explorer (armenianexplorer.com)"},{"name":"Zorats Church (Vorotnavank)","category":"Archaeological Sites","province":"Vayots Dzor","lat":39.874,"lon":45.219,"elevation":2090,"difficulty":"Medium","season":"May–Oct","notes":"Medieval church and fort complex. Trailhead for Smbataberd–Tsaghats Kar route.","source":"Armenian Explorer (armenianexplorer.com)"},{"name":"Byurakan Astrophysical Observatory","category":"Archaeological Sites","province":"Aragatsotn","lat":40.337,"lon":44.292,"elevation":1490,"difficulty":"Easy","season":"Apr–Oct","notes":"Soviet-era observatory with 1m Schmidt telescope (originally gifted to Mussolini). Active science site.","source":"Armenian Explorer (armenianexplorer.com)"},{"name":"ROT54 Radio-Optical Telescope","category":"Archaeological Sites","province":"Aragatsotn","lat":40.402,"lon":44.198,"elevation":1700,"difficulty":"Easy","season":"Apr–Oct","notes":"Abandoned Soviet-era radio telescope on Aragats slopes. Popular urbex destination at 1700m. Unique attraction.","source":"Armenian Explorer (armenianexplorer.com)"},{"name":"YerPhI Synchrotron (Physics Institute)","category":"Archaeological Sites","province":"Yerevan","lat":40.193,"lon":44.529,"elevation":1000,"difficulty":"Easy","season":"Year-round","notes":"Soviet-era underground particle accelerator. Guided urbex tour. Unique science-history attraction.","source":"Armenian Explorer (armenianexplorer.com)"},{"name":"Sevanavank Monastery","category":"Archaeological Sites","province":"Gegharkunik","lat":40.566,"lon":45.012,"elevation":1940,"difficulty":"Easy","season":"Apr–Oct","notes":"9th century monastery on peninsula of Lake Sevan. Iconic Armenia landmark. Easy walk from parking.","source":"Armenian Explorer (armenianexplorer.com)"},{"name":"Geghama Ridge Camping","category":"Camping Spots","province":"Gegharkunik/Kotayk","lat":40.16,"lon":45.1,"elevation":2800,"difficulty":"Hard","season":"Jun–Sep","notes":"Multi-day camping route across volcanic ridge. No facilities. Need full gear. Best camping in Armenia.","source":"ArmGeo (armgeo.am), We Hike Armenia (wehike.am)"},{"name":"Lastiver Overnight (Cave Camp)","category":"Camping Spots","province":"Tavush","lat":40.904,"lon":45.219,"elevation":890,"difficulty":"Medium","season":"May–Sep","notes":"Sleep inside a natural cave in the forest. Most unique camping experience in Armenia.","source":"ArmGeo (armgeo.am)"},{"name":"Mount Aragats Base Camp (Lake Kari)","category":"Camping Spots","province":"Aragatsotn","lat":40.48,"lon":44.197,"elevation":3185,"difficulty":"Medium","season":"Jun–Sep","notes":"Lake Kari at 3185m serves as basecamp for Aragats summits. Camping area with basic access road.","source":"ArmGeo (armgeo.am), We Hike Armenia (wehike.am)"},{"name":"Lake Tsakkar Camping","category":"Camping Spots","province":"Gegharkunik","lat":40.3,"lon":45.1,"elevation":2900,"difficulty":"Hard","season":"Jun–Sep","notes":"Remote alpine lake camp. 2-day hike to reach. No facilities. Full camping gear required.","source":"Armland (armland.am)"},{"name":"Pink Gorge (Yeranos slopes)","category":"Viewpoints","province":"Vayots Dzor","lat":39.885,"lon":45.19,"elevation":2500,"difficulty":"Medium","season":"May–Sep","notes":"Stunning pink and red rock gorge on Mount Yeranos. Otherworldly color comes from tuff formations.","source":"ArmGeo (armgeo.am), We Hike Armenia (wehike.am)"},{"name":"Tsaghkadzor–Bjni Trail","category":"Viewpoints","province":"Kotayk","lat":40.533,"lon":44.737,"elevation":2000,"difficulty":"Medium","season":"Apr–Oct","notes":"Point-to-point trail from ski resort Tsaghkadzor down to medieval Bjni fortress village. Panoramic views.","source":"ArmGeo (armgeo.am), We Hike Armenia (wehike.am)"},{"name":"Three Hawks Trail (Khosrov NP)","category":"Viewpoints","province":"Ararat","lat":40.052,"lon":44.658,"elevation":1800,"difficulty":"Medium","season":"Apr–Oct","notes":"Loop trail inside Khosrov Forest Reserve. Named for eagle sightings. Beautiful canyon views.","source":"ArmGeo (armgeo.am)"},{"name":"Dimats & Sartsapat Viewpoint","category":"Viewpoints","province":"Tavush","lat":40.831,"lon":44.95,"elevation":1780,"difficulty":"Easy","season":"Apr–Oct","notes":"Jeep road to Sartsapat plateau with Dimats peak above. Wide views over Tavush valleys.","source":"ArmGeo (armgeo.am)"},{"name":"Hors to Aghavnadzor (Vayots Dzor)","category":"Viewpoints","province":"Vayots Dzor","lat":39.902,"lon":45.502,"elevation":1820,"difficulty":"Medium","season":"May–Oct","notes":"Village-to-village hike through Vayots Dzor. Seasonal wildflowers. 'Several seasons in one day' views.","source":"ArmGeo (armgeo.am)"},{"name":"Mount Alsar (Spring Flowers)","category":"Viewpoints","province":"Vayots Dzor","lat":39.754,"lon":45.302,"elevation":2214,"difficulty":"Medium","season":"Apr–Jun","notes":"Spring bloom destination in Ararat Valley foothills. First flowers of the season. Combined with Kotur spring.","source":"We Hike Armenia (wehike.am)"},{"name":"Ararat Valley Panorama","category":"Viewpoints","province":"Ararat","lat":40.008,"lon":44.6,"elevation":800,"difficulty":"Easy","season":"Mar–Nov","notes":"Views of Mount Ararat from Armenia. Best from various hilltop viewpoints in Ararat province.","source":"We Hike Armenia (wehike.am)"},{"name":"Tatev Aerial Tram viewpoint","category":"Viewpoints","province":"Syunik","lat":39.427,"lon":46.261,"elevation":1500,"difficulty":"Easy","season":"Apr–Oct","notes":"World's longest reversible cable car (5.7 km). Dramatic views of Vorotan Gorge. Near Wings of Tatev.","source":"We Hike Armenia (wehike.am)"},{"name":"Ijevan Mountains (2-day trek)","category":"Viewpoints","province":"Tavush","lat":40.882,"lon":45.152,"elevation":1600,"difficulty":"Medium","season":"May–Oct","notes":"2-day trek through Ijevan highlands. Forest and alpine meadow landscapes. Less visited north Armenia.","source":"Armland (armland.am)"},{"name":"Chahalaberd Fortress (Bazaberd)","category":"Castles & Fortresses","province":"Lori","lat":41.182,"lon":44.315,"elevation":1580,"difficulty":"Hard","season":"May–Oct","notes":"Also known as Bazaberd. 10th century Kyurikyan Bagratid fortress near the Georgian border in Jiliza community. Surrounded by dense ancient forests. Well-preserved donjon and semicircular towers remain.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Tapi Berd (Gevorg Marzpetuni Fortress)","category":"Castles & Fortresses","province":"Ararat","lat":39.97,"lon":44.62,"elevation":1130,"difficulty":"Moderate","season":"Apr–Nov","notes":"Also called Gevorg Marzpetuni Fortress. Built 10th century on right bank of Khosrov river, 6 km NW of Urtsadzor. Contains 13th century church. Restored 2008–2009. Part of ancient Urtzy city complex.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Koshaberd Fortress","category":"Castles & Fortresses","province":"Lori","lat":41.11,"lon":44.64,"elevation":1420,"difficulty":"Moderate","season":"May–Oct","notes":"10th–13th century fortress on Virahayots mountains near Alaverdi and Madan. Commanding views over Debed canyon and Haghpat. One of the strongest Armenian fortresses, controlled access through Debed gorge.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Jraberd Fortress","category":"Castles & Fortresses","province":"Artsakh","lat":40.08,"lon":46.6,"elevation":900,"difficulty":"Hard","season":"May–Oct","notes":"Located in Artsakh (Martakert district) at confluence of Tartar and Trghi rivers. One of the mightiest defensive structures in Artsakh, protected on three sides by rivers and vertical cliffs. First mentioned 7th century. Seat of Melik-Israelyan princes.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Baghaberd Fortress (Kapan Fortress)","category":"Castles & Fortresses","province":"Syunik","lat":39.17,"lon":46.35,"elevation":1060,"difficulty":"Moderate","season":"Apr–Nov","notes":"Also known as Kapan Fortress. Known as impregnable since 4th–5th centuries. Capital of Syunik Kingdom after 1103 AD. Three-level defensive system with towers. Seljuk sack in 1170 destroyed 10,000+ manuscripts stored here.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Sev Berd (Black Fortress, Gyumri)","category":"Castles & Fortresses","province":"Shirak","lat":40.79,"lon":43.845,"elevation":1550,"difficulty":"Easy","season":"Year-round","notes":"Built 1834 as Russian military fortress and prison in Alexandropol (now Gyumri). Underground passages connect to the Mother Armenia monument and Karmir Berd. Protected monument of Gyumri's history and culture.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Horom Fortress (Urartian Citadel)","category":"Castles & Fortresses","province":"Shirak","lat":40.98,"lon":43.55,"elevation":1490,"difficulty":"Moderate","season":"Apr–Nov","notes":"Founded 9th century BC, Shirak marz, Horom village. Also called Urartian Citadel. Covers 4 km² with a 7 km defensive wall using cyclopean masonry. Bronze Age to Iron Age finds. Excavated by Piotrovsky in 1930s.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Halidzor Fortress","category":"Castles & Fortresses","province":"Syunik","lat":39.17,"lon":46.24,"elevation":1110,"difficulty":"Easy","season":"Apr–Nov","notes":"Built 17th century on right bank of Voghji river as a nunnery; had 70 nuns by 1668. Became David Bek's main fortress in the 18th century liberation struggle against Ottoman/Persian rule. Partly restored 2006–2009.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Lchashen Cyclopean Fortress","category":"Castles & Fortresses","province":"Gegharkunik","lat":40.52,"lon":45.07,"elevation":1940,"difficulty":"Easy","season":"May–Oct","notes":"Bronze Age cyclopean (megalithic) fortress on the shore of Lake Sevan near Lchashen village. Dates to 2nd millennium BC. Important archaeological site with burial mounds and artifacts. Easy access from the lake road.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Boloraberd (Proshaberd)","category":"Castles & Fortresses","province":"Vayots Dzor","lat":39.82,"lon":45.3,"elevation":1820,"difficulty":"Hard","season":"Jun–Oct","notes":"Remote medieval fortress in Vayots Dzor, also known as Proshaberd. Accessed via difficult terrain. One of the lesser-visited fortresses in the region offering a genuine off-the-beaten-path experience.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Berdavan Fortress","category":"Castles & Fortresses","province":"Tavush","lat":40.99,"lon":45.35,"elevation":860,"difficulty":"Moderate","season":"Apr–Nov","notes":"Medieval fortress near Berdavan village in northern Tavush, close to the Georgian border. Part of a chain of defensive structures guarding the northeastern borders of medieval Armenia.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Ara Fortress","category":"Castles & Fortresses","province":"Kotayk","lat":40.45,"lon":44.7,"elevation":1680,"difficulty":"Moderate","season":"May–Oct","notes":"Medieval fortress on the slopes of Mount Ara in Kotayk marz. Associated with the legendary King Ara the Beautiful. Offers panoramic views over the Ararat valley. Relatively accessible from Yerevan.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Akhtala Fortress","category":"Castles & Fortresses","province":"Lori","lat":41.15,"lon":44.77,"elevation":1100,"difficulty":"Easy","season":"Apr–Nov","notes":"10th–13th century fortress enclosing a remarkably well-preserved church with original Byzantine-style frescoes. Combined with the Akhtala monastery complex. On the main Debed canyon tourist route.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Kosh Fortress","category":"Castles & Fortresses","province":"Aragatsotn","lat":40.48,"lon":44.26,"elevation":1500,"difficulty":"Moderate","season":"May–Oct","notes":"Medieval fortress near Kosh village in Aragatsotn marz. Part of the dense network of fortifications guarding the slopes of Aragats and the Kasagh river valley in the Middle Ages.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Kayanberd Fortress","category":"Castles & Fortresses","province":"Gegharkunik","lat":40.22,"lon":45.02,"elevation":2020,"difficulty":"Hard","season":"Jun–Oct","notes":"Remote mountain fortress in Gegharkunik marz at high elevation. Requires significant hiking to reach. Rewarding views over Lake Sevan basin. Less documented than other Armenian fortresses.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Tavush Fortress (Tslik Amrami)","category":"Castles & Fortresses","province":"Tavush","lat":40.76,"lon":45.5,"elevation":910,"difficulty":"Moderate","season":"Apr–Nov","notes":"Also known as Tslik Amrami fortress, named after the medieval Armenian military commander. Located in Tavush marz on a strategic rocky promontory. One of the key defensive structures of northeastern Armenia.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Erebuni Fortress","category":"Castles & Fortresses","province":"Yerevan","lat":40.141,"lon":44.533,"elevation":990,"difficulty":"Easy","season":"Year-round","notes":"Urartian fortress-city founded 782 BC by King Argishti I — the origin of modern Yerevan. Open-air museum with excavated palace, temples, and storage rooms. UNESCO tentative list. Must-visit for archaeology.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Meghri Fortress","category":"Castles & Fortresses","province":"Syunik","lat":38.9,"lon":46.25,"elevation":720,"difficulty":"Easy","season":"Year-round","notes":"Medieval fortress overlooking Meghri town on the Armenian–Iranian border. Strategically located above the Araks River gorge. Accessible year-round due to the mild climate of southernmost Armenia.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Dashtadem Fortress (Khagheni)","category":"Castles & Fortresses","province":"Aragatsotn","lat":40.57,"lon":44.0,"elevation":1460,"difficulty":"Easy","season":"Apr–Nov","notes":"Also known as Khagheni fortress. Medieval fortress in Aragatsotn marz. Well-preserved sections of curtain walls and towers. Located in the agricultural flatlands west of Aragats, offering unusual setting for a fortress.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Bjni Fortress","category":"Castles & Fortresses","province":"Kotayk","lat":40.4,"lon":44.72,"elevation":1530,"difficulty":"Moderate","season":"Apr–Nov","notes":"10th–11th century fortress and capital of the Bjni princedom on a rocky spur above Hrazdan gorge near Bjni village. Impressive ruins with towers and walls. Often combined with visit to nearby Bjni mineral spring.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Lori Berd (Lori Fortress)","category":"Castles & Fortresses","province":"Lori","lat":41.02,"lon":44.38,"elevation":1430,"difficulty":"Easy","season":"Apr–Nov","notes":"10th–11th century fortress and capital of the Lori Kingdom of Kyurikyan Bagratids, at the confluence of Dzoraget and Urut rivers near Stepanavan. Extensive ruins spread over a promontory. Easy access, scenic canyon setting.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Mantashberd (Ashot Yerkat Fortress)","category":"Castles & Fortresses","province":"Lori","lat":41.08,"lon":44.32,"elevation":1360,"difficulty":"Moderate","season":"Apr–Nov","notes":"Also known as Ashot Yerkat (Ashot the Iron) fortress in Lori. Medieval defensive stronghold associated with the Bagratid king Ashot the Iron. Mentioned alongside Koshaberd and Aghchka Berd as key fortresses of the Debed canyon system.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"},{"name":"Aghchka Berd (Girl's Fortress)","category":"Castles & Fortresses","province":"Tavush","lat":40.96,"lon":45.21,"elevation":1120,"difficulty":"Hard","season":"May–Oct","notes":"Remote medieval fortress in Tavush, known as Girl's Fortress (Aghchka Berd). Considered one of Armenia's mightiest fortresses alongside Koshaberd. Difficult access through forested terrain. Panoramic views over the Tavush highlands.","source":"ArmGeo (armgeo.am/fortresses_and_castles)"}];
+
+// ── Category colors & icons ───────────────────────────────────────────────────
+const CAT_COLORS = {
+  "Mountains & Peaks":    "#4a90d9",
+  "Lakes & Rivers":       "#27ae60",
+  "Waterfalls":           "#1abc9c",
+  "Castles & Fortresses": "#e67e22",
+  "Caves":                "#9b59b6",
+  "Archaeological Sites": "#c0a020",
+  "Camping Spots":        "#2ecc71",
+  "Viewpoints":           "#e07040",
+};
+
+const CAT_ICONS = {
+  "Mountains & Peaks":    "⛰",
+  "Lakes & Rivers":       "💧",
+  "Waterfalls":           "💦",
+  "Castles & Fortresses": "🏰",
+  "Caves":                "🕳",
+  "Archaeological Sites": "🏛",
+  "Camping Spots":        "⛺",
+  "Viewpoints":           "👁",
+};
+
+const CAT_BADGE_BG = {
+  "Mountains & Peaks":    "#d6eaf8",
+  "Lakes & Rivers":       "#d5f5e3",
+  "Waterfalls":           "#d1f2eb",
+  "Castles & Fortresses": "#fdebd0",
+  "Caves":                "#e8daef",
+  "Archaeological Sites": "#fef9e7",
+  "Camping Spots":        "#d5f5e3",
+  "Viewpoints":           "#fde8d8",
+};
+
+// ── Province bounding boxes (for zoom-to-province) ────────────────────────────
+const PROV_BOUNDS = {
+  "Aragatsotn":          [[40.00, 43.85], [41.10, 44.62]],
+  "Ararat":              [[39.50, 43.78], [40.22, 44.98]],
+  "Artsakh":             [[39.70, 46.00], [40.60, 47.20]],
+  "Gegharkunik":         [[39.85, 44.82], [41.00, 46.10]],
+  "Gegharkunik/Kotayk":  [[39.85, 44.82], [41.00, 46.10]],
+  "Kotayk":              [[39.92, 44.38], [40.82, 45.32]],
+  "Lori":                [[40.58, 43.98], [41.35, 45.25]],
+  "Shirak":              [[40.48, 43.38], [41.32, 44.32]],
+  "Syunik":              [[38.82, 45.32], [39.82, 46.68]],
+  "Tavush":              [[40.40, 44.70], [41.35, 45.88]],
+  "Vayots Dzor":         [[39.38, 44.80], [40.22, 46.08]],
+  "Yerevan":             [[40.04, 44.30], [40.30, 44.72]],
+};
+
+
+// ── Marz (province) GeoJSON – fallback (used if OSM fetch fails) ─────────────
+const FALLBACK_GEOJSON = {"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"Shirak"},"geometry":{"type":"Polygon","coordinates":[[[43.58,41.09],[44.2,41.12],[44.2,40.65],[43.75,40.65],[43.75,40.74],[43.58,41.09]]]}},{"type":"Feature","properties":{"name":"Lori"},"geometry":{"type":"Polygon","coordinates":[[[44.2,41.12],[44.97,41.25],[45.05,40.95],[45.05,40.65],[44.2,40.65],[44.2,41.12]]]}},{"type":"Feature","properties":{"name":"Tavush"},"geometry":{"type":"Polygon","coordinates":[[[44.97,41.25],[45.18,40.99],[45.56,40.81],[45.36,40.56],[45.1,40.65],[45.05,40.65],[45.05,40.95],[44.97,41.25]]]}},{"type":"Feature","properties":{"name":"Aragatsotn"},"geometry":{"type":"Polygon","coordinates":[[[43.75,40.74],[43.66,40.25],[44.4,40.01],[44.55,40.0],[44.55,40.65],[44.2,40.65],[43.75,40.65],[43.75,40.74]]]}},{"type":"Feature","properties":{"name":"Yerevan"},"geometry":{"type":"Polygon","coordinates":[[[44.38,40.25],[44.65,40.25],[44.65,40.05],[44.38,40.05],[44.38,40.25]]]}},{"type":"Feature","properties":{"name":"Kotayk"},"geometry":{"type":"Polygon","coordinates":[[[44.55,40.65],[45.1,40.65],[45.1,40.0],[44.55,40.0],[44.55,40.65]]]}},{"type":"Feature","properties":{"name":"Gegharkunik"},"geometry":{"type":"Polygon","coordinates":[[[45.1,40.65],[45.36,40.56],[45.89,40.22],[45.61,39.9],[45.85,39.9],[45.85,40.0],[45.1,40.0],[45.1,40.65]]]}},{"type":"Feature","properties":{"name":"Ararat"},"geometry":{"type":"Polygon","coordinates":[[[44.4,40.01],[44.55,40.0],[44.9,40.0],[44.9,39.6],[45.0,39.74],[44.79,39.71],[44.4,40.01]]]}},{"type":"Feature","properties":{"name":"Vayots Dzor"},"geometry":{"type":"Polygon","coordinates":[[[44.9,40.0],[45.85,40.0],[45.85,39.9],[46.03,39.63],[45.55,39.65],[45.3,39.47],[45.0,39.74],[44.9,39.6],[44.9,40.0]]]}},{"type":"Feature","properties":{"name":"Syunik"},"geometry":{"type":"Polygon","coordinates":[[[45.55,39.65],[46.03,39.63],[46.48,39.46],[46.51,38.77],[46.14,38.74],[45.74,39.32],[45.74,39.47],[45.3,39.47],[45.55,39.65]]]}}]};
+
+// OSM name:en → our internal province key (all known variants)
+const OSM_TO_PROV = {
+  "Shirak":"Shirak","Lori":"Lori","Tavush":"Tavush",
+  "Aragatsotn":"Aragatsotn","Kotayk":"Kotayk",
+  "Gegharkunik":"Gegharkunik","Geghark’unik’":"Gegharkunik","Gegharkunik’":"Gegharkunik",
+  "Ararat":"Ararat","Vayots Dzor":"Vayots Dzor","Vayots’ Dzor":"Vayots Dzor","Vayotz Dzor":"Vayots Dzor",
+  "Syunik":"Syunik","Yerevan":"Yerevan",
+  "Aragatsotn Province":"Aragatsotn","Aragatsotn Marz":"Aragatsotn",
+  "Ararat Province":"Ararat","Ararat Marz":"Ararat",
+  "Gegharkunik Province":"Gegharkunik","Gegharkunik Marz":"Gegharkunik",
+  "Kotayk Province":"Kotayk","Kotayk Marz":"Kotayk",
+  "Lori Province":"Lori","Lori Marz":"Lori",
+  "Shirak Province":"Shirak","Shirak Marz":"Shirak",
+  "Syunik Province":"Syunik","Syunik Marz":"Syunik",
+  "Tavush Province":"Tavush","Tavush Marz":"Tavush",
+  "Vayots Dzor Province":"Vayots Dzor","Vayots Dzor Marz":"Vayots Dzor",
+  "Yerevan City":"Yerevan","City of Yerevan":"Yerevan","Yerevan Province":"Yerevan",
+};
+
+// Robust normalizer: checks map, then strips common OSM suffixes, then falls back to raw
+function normalizeProvName(raw) {
+  if (!raw) return raw;
+  if (OSM_TO_PROV[raw]) return OSM_TO_PROV[raw];
+  const stripped = raw.replace(/\s+(Province|Marz|Region|City|Marzer)\s*$/i, '').trim();
+  return OSM_TO_PROV[stripped] || stripped;
+}
+
+// ── Map init ──────────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView([40.18, 44.95], 7);
+
+// ── Tile theme definitions ────────────────────────────────────────────────────
+const TILE_THEMES = {
+  relief: {
+    label: 'Relief',
+    layers: [
+      { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',
+        opts: { attribution: '&copy; Esri', maxZoom: 18 } },
+      { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+        opts: { maxZoom: 18 } }
+    ]
+  },
+  topo: {
+    label: 'Topo',
+    layers: [
+      { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+        opts: { attribution: '&copy; Esri', maxZoom: 18 } }
+    ]
+  },
+  satellite: {
+    label: 'Satellite',
+    layers: [
+      { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        opts: { attribution: '&copy; Esri', maxZoom: 18 } },
+      { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+        opts: { maxZoom: 18, opacity: 0.85 } }
+    ]
+  },
+  outdoor: {
+    label: 'Outdoor',
+    layers: [
+      { url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
+        opts: { attribution: '&copy; OpenTopoMap', maxZoom: 17 } }
+    ]
+  },
+  street: {
+    label: 'Street',
+    layers: [
+      { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+        opts: { attribution: '&copy; CartoDB', subdomains: 'abcd', maxZoom: 19 } }
+    ]
+  }
+};
+
+let activeTileLayers = [];
+
+function setTheme(themeId) {
+  // Remove current tile layers
+  activeTileLayers.forEach(l => map.removeLayer(l));
+  activeTileLayers = [];
+
+  const theme = TILE_THEMES[themeId];
+  if (!theme) return;
+
+  theme.layers.forEach(cfg => {
+    const l = L.tileLayer(cfg.url, cfg.opts).addTo(map);
+    activeTileLayers.push(l);
+  });
+
+  // Keep GeoJSON layers on top (they live in overlay pane, naturally above tiles)
+  // Update button states
+  document.querySelectorAll('.theme-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.theme === themeId);
+  });
+}
+
+// Start with Relief theme
+setTheme('relief');
+
+// Theme button clicks
+document.querySelectorAll('.theme-btn').forEach(btn => {
+  btn.addEventListener('click', () => setTheme(btn.dataset.theme));
+});
+
+// ── Marz boundary layer ───────────────────────────────────────────────────────
+const STYLE_DEFAULT  = { color: '#3a5a8a', weight: 1.5, opacity: 0.5, fillOpacity: 0, fillColor: '#3a7ab5' };
+const STYLE_HOVER    = { color: '#1a5c9e', weight: 2.5, opacity: 0.9, fillOpacity: 0.10, fillColor: '#3a7ab5' };
+const STYLE_SELECTED = { color: '#c0392b', weight: 3,   opacity: 1,   fillOpacity: 0.14, fillColor: '#e74c3c' };
+
+let selectedMarz = null;
+let marzLayer = null;
+
+function initMarzLayer(geojsonData, nameGetter) {
+  if (marzLayer) map.removeLayer(marzLayer);
+
+  marzLayer = L.geoJSON(geojsonData, {
+    style: STYLE_DEFAULT,
+    filter: f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'),
+    onEachFeature(feature, layer) {
+      const rawName = nameGetter(feature);
+      const name = normalizeProvName(rawName);
+
+      layer.bindTooltip(`<b>${name}</b>`, {
+        permanent: false, sticky: true,
+        className: 'marz-tooltip', direction: 'center'
+      });
+
+      layer.on({
+        mouseover() { if (layer !== selectedMarz) layer.setStyle(STYLE_HOVER); },
+        mouseout()  { if (layer !== selectedMarz) marzLayer.resetStyle(layer); },
+        click(e) {
+          if (selectedMarz && selectedMarz !== layer) marzLayer.resetStyle(selectedMarz);
+
+          if (selectedMarz === layer) {
+            // Deselect
+            marzLayer.resetStyle(layer); selectedMarz = null;
+            activeMarzGeom = null; activeProv = 'ALL';
+            document.getElementById('prov-select').value = 'ALL';
+            map.setView([40.18, 44.95], 7); applyFilters();
+          } else {
+            // Select — use geometry for spatial filtering (no name-matching needed)
+            layer.setStyle(STYLE_SELECTED); layer.bringToFront(); selectedMarz = layer;
+            activeMarzGeom = feature.geometry;
+            activeProv = name; // sync dropdown if name matches
+            const matchingOpt = [...document.querySelectorAll('#prov-select option')]
+              .find(o => o.value === name || o.text === name);
+            document.getElementById('prov-select').value = matchingOpt ? matchingOpt.value : 'ALL';
+            applyFilters();
+            const bounds = PROV_BOUNDS[name];
+            if (bounds) map.fitBounds(bounds, { padding: [30, 30] });
+            else map.fitBounds(layer.getBounds().pad(0.15));
+          }
+          L.DomEvent.stopPropagation(e);
+        }
+      });
+    }
+  }).addTo(map);
+}
+
+// Click on map background → deselect marz
+map.on('click', () => {
+  if (selectedMarz && marzLayer) {
+    marzLayer.resetStyle(selectedMarz); selectedMarz = null;
+    activeMarzGeom = null; activeProv = 'ALL';
+    document.getElementById('prov-select').value = 'ALL';
+    applyFilters();
+  }
+});
+
+// ── Load marz borders (Overpass API, POST + mirror fallback) ─────────────────
+(function loadMarzBorders() {
+  const statusEl = document.getElementById('marz-status');
+  const query = '[out:json][timeout:55];area["ISO3166-1"="AM"]->.a;relation["boundary"="administrative"]["admin_level"="4"](area.a);out body;>;out skel qt;';
+  const MIRRORS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://lz4.overpass-api.de/api/interpreter',
+  ];
+
+  function postMirror(url) {
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(query)
+    }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+  }
+
+  function tryNext(idx) {
+    if (idx >= MIRRORS.length) return Promise.reject(new Error('All mirrors failed'));
+    return postMirror(MIRRORS[idx]).catch(() => tryNext(idx + 1));
+  }
+
+  tryNext(0)
+    .then(osmData => {
+      if (typeof osmtogeojson !== 'function') throw new Error('osmtogeojson not loaded');
+      const geojson = osmtogeojson(osmData);
+      const features = (geojson.features || []).filter(f =>
+        f.geometry &&
+        (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') &&
+        f.properties && f.properties['admin_level'] === '4'
+      );
+      if (features.length === 0) throw new Error('No marz features');
+      initMarzLayer({ type: 'FeatureCollection', features },
+        f => f.properties['name:en'] || f.properties.name);
+      if (statusEl) statusEl.style.display = 'none';
+    })
+    .catch(err => {
+      console.warn('Marz fetch failed, using fallback:', err.message);
+      initMarzLayer(FALLBACK_GEOJSON, f => f.properties.name);
+      if (statusEl) {
+        statusEl.textContent = '⚠ Using approximate borders';
+        statusEl.style.color = '#e67e22';
+        setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
+      }
+    });
+})();
+
+// ── Load Armenia country border (separate lightweight fetch) ──────────────────
+(function loadCountryBorder() {
+  // georgique/world-geojson: pre-built Armenia outline, ~75KB, no conversion needed
+  const url = 'https://raw.githubusercontent.com/georgique/world-geojson/develop/countries/armenia.json';
+  fetch(url)
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(geojson => {
+      L.geoJSON(geojson, {
+        style: { color: '#1a3a5c', weight: 3, opacity: 0.85, fillOpacity: 0, lineJoin: 'round' },
+        interactive: false
+      }).addTo(map);
+    })
+    .catch(err => console.warn('Country border fetch failed:', err.message));
+})();
+
+
+// ── Marker creation ───────────────────────────────────────────────────────────
+function makeIcon(cat) {
+  const color = CAT_COLORS[cat] || '#aaa';
+  const emoji = CAT_ICONS[cat] || '📍';
+  const html = `<div style="
+    background:${color};
+    width:32px;height:32px;
+    border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:16px;line-height:1;
+    box-shadow:0 2px 8px rgba(0,0,0,0.5);
+    border:2.5px solid #fff;
+    outline:1px solid rgba(0,0,0,0.15);
+  ">${emoji}</div>`;
+  return L.divIcon({
+    html,
+    className: '',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -18]
+  });
+}
+
+function diffBadge(diff) {
+  const colors = { Easy: '#27ae60', Medium: '#f39c12', Hard: '#e74c3c', Moderate: '#e67e22' };
+  const key = Object.keys(colors).find(k => diff && diff.startsWith(k)) || 'Easy';
+  return `<span style="background:${colors[key]};color:#fff;padding:1px 6px;border-radius:8px;font-size:0.65rem;font-weight:700;">${diff}</span>`;
+}
+
+function makePopup(d) {
+  const color = CAT_COLORS[d.category] || '#888';
+  const bg    = CAT_BADGE_BG[d.category] || '#f0f0f0';
+  return `<div class="popup-inner">
+    <div class="popup-cat" style="background:${bg};color:${color};">${d.category}</div>
+    <div class="popup-name">${d.name}</div>
+    <div class="popup-grid">
+      <div class="lbl">Province</div><div class="val">${d.province}</div>
+      <div class="lbl">Elevation</div><div class="val">${d.elevation ? d.elevation.toLocaleString() + ' m' : '—'}</div>
+      <div class="lbl">Difficulty</div><div class="val">${diffBadge(d.difficulty)}</div>
+      <div class="lbl">Best season</div><div class="val">${d.season || '—'}</div>
+    </div>
+    ${d.notes ? `<div class="popup-notes">${d.notes}</div>` : ''}
+  </div>`;
+}
+
+// ── Build markers ─────────────────────────────────────────────────────────────
+const markers = DESTINATIONS.map(d => {
+  if (!d.lat || !d.lon) return null;
+  const m = L.marker([d.lat, d.lon], { icon: makeIcon(d.category) });
+  m.bindPopup(makePopup(d), { maxWidth: 300 });
+  m._destData = d;
+  return m;
+}).filter(Boolean);
+
+const markerGroup = L.layerGroup(markers).addTo(map);
+
+// ── Point-in-polygon (ray casting) ───────────────────────────────────────────
+function pointInRing(lat, lon, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1]; // GeoJSON: [lon, lat]
+    const xj = ring[j][0], yj = ring[j][1];
+    if (((yi > lat) !== (yj > lat)) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)
+      inside = !inside;
+  }
+  return inside;
+}
+function pointInGeometry(lat, lon, geom) {
+  if (!geom) return false;
+  if (geom.type === 'Polygon')
+    return pointInRing(lat, lon, geom.coordinates[0]);
+  if (geom.type === 'MultiPolygon')
+    return geom.coordinates.some(poly => pointInRing(lat, lon, poly[0]));
+  return false;
+}
+
+// ── Filter logic ──────────────────────────────────────────────────────────────
+let activeCat = 'ALL';
+let activeProv = 'ALL';
+let activeMarzGeom = null; // geometry of clicked marz (spatial filter)
+
+function applyFilters() {
+  let visible = 0;
+  markers.forEach(m => {
+    const d = m._destData;
+    const catOk  = activeCat === 'ALL' || d.category === activeCat;
+    let provOk;
+    if (activeMarzGeom) {
+      // Spatial check — works regardless of province name spelling
+      provOk = pointInGeometry(d.lat, d.lon, activeMarzGeom);
+    } else {
+      provOk = activeProv === 'ALL' ||
+               d.province === activeProv ||
+               d.province.split('/').some(p => p.trim() === activeProv);
+    }
+    if (catOk && provOk) {
+      markerGroup.addLayer(m);
+      visible++;
+    } else {
+      markerGroup.removeLayer(m);
+    }
+  });
+  document.getElementById('vis-count').textContent = visible;
+}
+
+// Category buttons
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeCat = btn.dataset.cat;
+    applyFilters();
+  });
+});
+
+// Province select
+document.getElementById('prov-select').addEventListener('change', e => {
+  activeProv = e.target.value;
+  if (activeProv !== 'ALL') {
+    // Zoom to predefined province bounding box
+    const bounds = PROV_BOUNDS[activeProv];
+    if (bounds) {
+      map.fitBounds(bounds, { padding: [30, 30] });
+    } else {
+      // Fallback: zoom to markers in that province
+      const pts = markers.filter(m => m._destData.province === activeProv);
+      if (pts.length) map.fitBounds(L.featureGroup(pts).getBounds().pad(0.3));
+    }
+  } else {
+    map.setView([40.18, 44.95], 7);
+  }
+  applyFilters();
+});
+
+// Clear button
+document.getElementById('clear-btn').addEventListener('click', () => {
+  activeCat = 'ALL';
+  activeProv = 'ALL';
+  activeMarzGeom = null;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.filter-btn[data-cat="ALL"]').classList.add('active');
+  document.getElementById('prov-select').value = 'ALL';
+  if (selectedMarz && marzLayer) { marzLayer.resetStyle(selectedMarz); selectedMarz = null; }
+  map.setView([40.18, 44.95], 7);
+  applyFilters();
+});
+</script>
+</body>
+</html>

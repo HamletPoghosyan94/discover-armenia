@@ -63,6 +63,20 @@
   .leaflet-popup-tip { background: #fff; }
   .leaflet-popup-content { margin: 0; width: 280px !important; }
 
+  .popup-img-wrap {
+    width: 100%; height: 160px; overflow: hidden;
+    border-radius: 10px 10px 0 0;
+    background: linear-gradient(135deg, #e8eaf0, #d0d4dc);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .popup-img {
+    width: 100%; height: 100%; object-fit: cover;
+    display: none; position: absolute; top: 0; left: 0;
+    transition: opacity 0.3s;
+  }
+  .popup-img-placeholder { font-size: 2.8rem; opacity: 0.3; }
+
   .popup-inner { padding: 12px 14px; }
   .popup-cat {
     display: inline-block; font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
@@ -509,19 +523,58 @@ function diffBadge(diff) {
   return `<span style="background:${colors[key]};color:#fff;padding:1px 6px;border-radius:8px;font-size:0.65rem;font-weight:700;">${diff}</span>`;
 }
 
+// ── Wikipedia image fetch ─────────────────────────────────────────────────────
+const wikiCache = {};
+
+function fetchWikiImage(destName, wrapEl) {
+  if (wikiCache[destName] !== undefined) {
+    applyWikiImage(wikiCache[destName], wrapEl); return;
+  }
+  // Clean name: strip parentheticals and trailing descriptor words
+  const cleaned = destName
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\s+(hike approach|speleo hike|aerial tram|7 volcanoes|2-day trek|spring flowers|camping)\s*$/i, '')
+    .replace(/\s+/g, ' ').trim();
+
+  fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(cleaned))
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(data => {
+      // Upgrade thumbnail to 400px width
+      const src = data.thumbnail?.source?.replace(/\/\d+px-/, '/400px-') || null;
+      wikiCache[destName] = src;
+      applyWikiImage(src, wrapEl);
+    })
+    .catch(() => { wikiCache[destName] = null; });
+}
+
+function applyWikiImage(src, wrapEl) {
+  if (!src || !wrapEl) return;
+  const img = wrapEl.querySelector('.popup-img');
+  img.onload = () => { img.style.display = 'block'; };
+  img.onerror = () => {};
+  img.src = src;
+}
+
 function makePopup(d) {
   const color = CAT_COLORS[d.category] || '#888';
   const bg    = CAT_BADGE_BG[d.category] || '#f0f0f0';
-  return `<div class="popup-inner">
-    <div class="popup-cat" style="background:${bg};color:${color};">${d.category}</div>
-    <div class="popup-name">${d.name}</div>
-    <div class="popup-grid">
-      <div class="lbl">Province</div><div class="val">${d.province}</div>
-      <div class="lbl">Elevation</div><div class="val">${d.elevation ? d.elevation.toLocaleString() + ' m' : '—'}</div>
-      <div class="lbl">Difficulty</div><div class="val">${diffBadge(d.difficulty)}</div>
-      <div class="lbl">Best season</div><div class="val">${d.season || '—'}</div>
+  const emoji = CAT_ICONS[d.category] || '📍';
+  return `<div>
+    <div class="popup-img-wrap">
+      <span class="popup-img-placeholder">${emoji}</span>
+      <img class="popup-img" alt="${d.name}">
     </div>
-    ${d.notes ? `<div class="popup-notes">${d.notes}</div>` : ''}
+    <div class="popup-inner">
+      <div class="popup-cat" style="background:${bg};color:${color};">${d.category}</div>
+      <div class="popup-name">${d.name}</div>
+      <div class="popup-grid">
+        <div class="lbl">Province</div><div class="val">${d.province}</div>
+        <div class="lbl">Elevation</div><div class="val">${d.elevation ? d.elevation.toLocaleString() + ' m' : '—'}</div>
+        <div class="lbl">Difficulty</div><div class="val">${diffBadge(d.difficulty)}</div>
+        <div class="lbl">Best season</div><div class="val">${d.season || '—'}</div>
+      </div>
+      ${d.notes ? `<div class="popup-notes">${d.notes}</div>` : ''}
+    </div>
   </div>`;
 }
 
@@ -531,6 +584,10 @@ const markers = DESTINATIONS.map(d => {
   const m = L.marker([d.lat, d.lon], { icon: makeIcon(d.category) });
   m.bindPopup(makePopup(d), { maxWidth: 300 });
   m._destData = d;
+  m.on('popupopen', () => {
+    const wrapEl = document.querySelector('.leaflet-popup-content .popup-img-wrap');
+    if (wrapEl) fetchWikiImage(d.name, wrapEl);
+  });
   return m;
 }).filter(Boolean);
 

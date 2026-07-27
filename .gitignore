@@ -1,0 +1,5 @@
+# Design export — reference material only, not part of the shipped app
+design/
+
+# macOS
+.DS_Store

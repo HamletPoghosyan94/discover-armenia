@@ -2,431 +2,476 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Discover Armenia — Destinations Map</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Discover Armenia — Explore</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/osmtogeojson@3.0.0-beta.5/osmtogeojson.js"></script>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f5f5; color: #222; height: 100vh; display: flex; flex-direction: column; }
+  :root { --accent-a:#2f3e46; --accent-b:#e8a33d; }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; }
+  body { font-family:'Segoe UI', Arial, sans-serif; background:#f5f5f5; color:#222;
+    height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  a { color:var(--accent-a); text-decoration:none; }
 
-  /* ── Header ── */
-  #header {
-    background: linear-gradient(135deg, #c0392b 0%, #96281b 100%);
-    border-bottom: 3px solid #922b21;
-    padding: 10px 16px;
-    display: flex; align-items: center; gap: 14px; flex-shrink: 0;
-  }
-  #header h1 { font-size: 1.2rem; font-weight: 700; color: #fff; letter-spacing: 0.5px; }
-  #header h1 span { color: #fde68a; }
-  #dest-count { background: rgba(255,255,255,0.25); color: #fff; font-size: 0.72rem; font-weight: 700;
-    padding: 2px 8px; border-radius: 12px; margin-left: 4px; border: 1px solid rgba(255,255,255,0.4); }
+  /* ── View switching ── */
+  #views { flex:1; min-height:0; position:relative; }
+  .view { position:absolute; inset:0; display:none; flex-direction:column; }
+  .view.active { display:flex; }
+  .scroll-view { overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .view.scroll-view.active { display:block; }
 
-  /* ── Controls bar ── */
-  #controls {
-    background: #fff;
-    border-bottom: 1px solid #ddd;
-    padding: 8px 14px;
-    display: flex; align-items: center; flex-wrap: wrap; gap: 6px; flex-shrink: 0;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  /* ── Dark header ── */
+  .app-header {
+    background:linear-gradient(135deg,#2f3e46 0%,#1c252b 100%);
+    border-bottom:3px solid #1c252b; padding:11px 16px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0;
   }
-  #controls label { font-size: 0.72rem; color: #888; margin-right: 2px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .app-header .brand { display:flex; align-items:center; gap:8px; }
+  .app-header h1 { font-size:1.05rem; font-weight:700; color:#fff; letter-spacing:0.3px; }
+  .app-header h1 span { color:#fde68a; }
+  .avatar { width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.22);
+    border:1px solid rgba(255,255,255,0.4); display:flex; align-items:center; justify-content:center;
+    color:#fff; font-size:0.72rem; font-weight:700; flex-shrink:0; }
 
-  .filter-btn {
-    border: none; border-radius: 14px; padding: 4px 11px; font-size: 0.73rem; font-weight: 600;
-    cursor: pointer; transition: all 0.15s; white-space: nowrap; opacity: 0.4;
-  }
-  .filter-btn.active { opacity: 1; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
-  .filter-btn:hover { opacity: 0.8; }
+  /* ── Progress strip ── */
+  #progress-strip { background:#fff; padding:9px 16px 8px; border-bottom:1px solid #eee; flex-shrink:0; }
+  #progress-strip .row { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+  #progress-label { font-size:0.82rem; font-weight:700; color:#222; }
+  #progress-count { font-size:0.72rem; color:#999; }
+  .track { height:6px; background:#eee; border-radius:3px; overflow:hidden; }
+  .track > div { height:100%; background:linear-gradient(90deg,var(--accent-a),var(--accent-b)); border-radius:3px; transition:width .5s ease; }
 
-  .sep { width: 1px; height: 22px; background: #e0e0e0; margin: 0 4px; flex-shrink: 0; }
-
-  #prov-select {
-    background: #f5f5f5; color: #444; border: 1px solid #ccc;
-    border-radius: 8px; padding: 4px 8px; font-size: 0.73rem; cursor: pointer;
-  }
-  #clear-btn {
-    background: #f0f0f0; color: #666; border: 1px solid #ddd; border-radius: 8px;
-    padding: 4px 10px; font-size: 0.73rem; cursor: pointer; margin-left: auto;
-  }
-  #clear-btn:hover { background: #e0e0e0; color: #333; }
+  /* ── Controls ── */
+  #controls { background:#fff; border-bottom:1px solid #ddd; padding:8px 16px 9px; flex-shrink:0;
+    box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+  #search { width:100%; border:1px solid #ddd; background:#f5f5f5; border-radius:9px;
+    padding:8px 10px; font-size:0.8rem; margin-bottom:8px; outline:none; color:#222; }
+  #chips { display:flex; gap:6px; overflow-x:auto; margin-bottom:8px; padding-bottom:2px; }
+  #chips::-webkit-scrollbar { display:none; }
+  .filter-btn { border:none; border-radius:14px; padding:5px 11px; font-size:0.72rem; font-weight:700;
+    cursor:pointer; white-space:nowrap; opacity:0.4; transition:opacity .15s; flex-shrink:0; }
+  .filter-btn.active { opacity:1; box-shadow:0 2px 6px rgba(0,0,0,0.25); }
+  .controls-row { display:flex; align-items:center; gap:8px; }
+  #prov-select { flex-shrink:0; max-width:46%; background:#f5f5f5; color:#444; border:1px solid #ccc;
+    border-radius:8px; padding:6px 6px; font-size:0.72rem; cursor:pointer; }
+  #state-toggle { display:flex; background:#f0f0f0; border-radius:9px; padding:2px; flex:1; }
+  .state-btn { flex:1; border:none; background:transparent; border-radius:7px; padding:6px 2px;
+    font-size:0.66rem; font-weight:700; color:#777; cursor:pointer; white-space:nowrap; }
+  .state-btn.active { background:#fff; color:var(--accent-a); box-shadow:0 1px 4px rgba(0,0,0,0.15); }
 
   /* ── Map ── */
-  #map { flex: 1; }
+  #map-area { flex:1; position:relative; min-height:0; }
+  #map { position:absolute; inset:0; }
+  .leaflet-popup, .leaflet-control-attribution { font-family:'Segoe UI', Arial, sans-serif; font-size:0.65rem; }
 
-  /* ── Popup ── */
-  .leaflet-popup-content-wrapper {
-    background: #fff; border: 1px solid #e0e0e0; border-radius: 10px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-  }
-  .leaflet-popup-tip { background: #fff; }
-  .leaflet-popup-content { margin: 0; width: 280px !important; }
+  .map-overlay { position:absolute; z-index:900; background:rgba(255,255,255,0.95);
+    border:1px solid #ddd; border-radius:8px; box-shadow:0 1px 6px rgba(0,0,0,0.15); }
+  #shown-count { top:10px; right:10px; padding:4px 9px; font-size:0.7rem; color:#777; }
+  #shown-count b { color:#222; }
+  #state-legend { bottom:10px; left:10px; padding:6px 9px; font-size:0.62rem; color:#555; display:flex; gap:9px; }
+  #state-legend .muted { opacity:0.6; }
+  #marz-status { bottom:44px; left:10px; padding:4px 10px; font-size:0.68rem; color:#666; }
+  #theme-switcher { bottom:10px; left:50%; transform:translateX(-50%); padding:4px 6px;
+    display:flex; gap:2px; max-width:92%; overflow-x:auto; }
+  #theme-switcher::-webkit-scrollbar { display:none; }
+  .theme-btn { border:none; border-radius:7px; padding:5px 9px; font-size:0.68rem; font-weight:600;
+    cursor:pointer; background:transparent; color:#555; white-space:nowrap; flex-shrink:0; transition:all .15s; }
+  .theme-btn.active { background:var(--accent-a); color:#fff; }
+  .marz-tooltip { background:rgba(255,255,255,0.92); border:1px solid #ccc; border-radius:6px;
+    padding:4px 8px; font-size:0.78rem; font-weight:700; color:#333; box-shadow:0 2px 6px rgba(0,0,0,0.15); pointer-events:none; }
+  .marz-tooltip::before { display:none; }
 
-  .popup-img-wrap {
-    width: 100%; height: 160px; overflow: hidden;
-    border-radius: 10px 10px 0 0;
-    background: linear-gradient(135deg, #e8eaf0, #d0d4dc);
-    display: flex; align-items: center; justify-content: center;
-    position: relative;
-  }
-  .popup-img {
-    width: 100%; height: 100%; object-fit: cover;
-    display: none; position: absolute; top: 0; left: 0;
-    transition: opacity 0.3s;
-  }
-  .popup-img-placeholder { font-size: 2.8rem; opacity: 0.3; }
+  /* ── Bottom sheet ── */
+  #sheet-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:1900;
+    opacity:0; pointer-events:none; transition:opacity .25s; }
+  #sheet { position:fixed; left:50%; bottom:0; transform:translate(-50%,105%); width:100%; max-width:480px;
+    background:#fff; border-radius:16px 16px 0 0; box-shadow:0 -6px 24px rgba(0,0,0,0.25);
+    z-index:1901; max-height:82%; overflow-y:auto; transition:transform .3s ease; }
+  #sheet .grabber { width:36px; height:4px; background:#ddd; border-radius:2px; margin:10px auto 4px; }
+  #sheet-photo { width:100%; height:150px; position:relative; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg,#e8eaf0,#d8dce4); overflow:hidden; }
+  #sheet-photo .emoji { font-size:2.6rem; opacity:0.35; }
+  #sheet-photo img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none; }
+  .sheet-body { padding:14px 18px 20px; }
+  #sheet-cat { display:inline-block; font-size:0.62rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.5px; border-radius:10px; padding:3px 9px; margin-bottom:8px; }
+  #sheet-name { font-size:1.05rem; font-weight:700; color:#1a1a1a; margin-bottom:2px; }
+  #sheet-name-hy { font-size:0.82rem; color:#888; margin-bottom:10px; }
+  #sheet-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px 8px; margin-bottom:10px; font-size:0.72rem; }
+  #sheet-grid .k { color:#999; font-size:0.6rem; text-transform:uppercase; }
+  #sheet-grid .v { font-weight:700; }
+  #sheet-clubs { font-size:0.74rem; color:#555; margin-bottom:8px; font-weight:600; }
+  #sheet-notes { font-size:0.75rem; color:#555; line-height:1.5; border-top:1px solid #eee; padding-top:9px; margin-bottom:14px; }
+  .action-row { display:flex; gap:10px; margin-bottom:10px; }
+  .action-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:11px 0;
+    border-radius:10px; font-size:0.85rem; font-weight:700; cursor:pointer; border:2px solid transparent; background:#fff; }
+  .details-toggle { text-align:center; font-size:0.75rem; color:var(--accent-a); font-weight:600; cursor:pointer; }
+  #details-panel { display:none; margin-top:12px; border-top:1px solid #eee; padding-top:12px; }
+  #details-panel label { display:block; font-size:0.66rem; color:#999; text-transform:uppercase;
+    letter-spacing:0.4px; font-weight:700; margin-bottom:4px; }
+  #details-panel input[type=date], #details-panel textarea { width:100%; border:1px solid #ddd; background:#fafafa;
+    border-radius:8px; padding:8px 9px; font-size:0.8rem; margin-bottom:10px; font-family:inherit; outline:none; }
+  #details-panel textarea { resize:vertical; min-height:52px; }
+  #details-save { width:100%; padding:10px; border:none; border-radius:9px; background:var(--accent-a); color:#fff;
+    font-weight:700; font-size:0.82rem; cursor:pointer; }
+  #detail-photos { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  #detail-photos img { width:54px; height:54px; object-fit:cover; border-radius:8px; border:1px solid #ddd; }
 
-  .popup-inner { padding: 12px 14px; }
-  .popup-cat {
-    display: inline-block; font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.6px; border-radius: 10px; padding: 2px 8px; margin-bottom: 6px;
-  }
-  .popup-name { font-size: 0.98rem; font-weight: 700; color: #1a1a1a; margin-bottom: 8px; line-height: 1.3; }
-  .popup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; margin-bottom: 8px; }
-  .popup-grid div { font-size: 0.72rem; }
-  .popup-grid .lbl { color: #999; }
-  .popup-grid .val { color: #333; font-weight: 600; }
-  .popup-notes { font-size: 0.72rem; color: #555; line-height: 1.45; border-top: 1px solid #eee; padding-top: 7px; }
+  /* ── Toast ── */
+  #toast { position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:2400; background:#222; color:#fff;
+    padding:8px 16px; border-radius:20px; font-size:0.8rem; font-weight:700; display:none; box-shadow:0 4px 14px rgba(0,0,0,0.3); }
+  @keyframes toast-in { from{opacity:0;transform:translate(-50%,8px);} to{opacity:1;transform:translate(-50%,0);} }
 
-  /* ── Legend ── */
-  #legend {
-    position: absolute; bottom: 26px; right: 10px; z-index: 1000;
-    background: rgba(255,255,255,0.95); border: 1px solid #ddd;
-    border-radius: 10px; padding: 10px 12px; font-size: 0.72rem;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.12);
-  }
-  #legend h4 { color: #888; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.65rem; margin-bottom: 7px; }
-  .legend-row { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; color: #444; }
-  .legend-icon {
-    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 12px; line-height: 1;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  }
+  /* ── Badge modal ── */
+  #badge-modal { position:fixed; inset:0; background:rgba(20,8,8,0.78); z-index:2500; display:none;
+    align-items:center; justify-content:center; overflow:hidden; }
+  #confetti-layer { position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+  #badge-card { position:relative; background:#fff; border-radius:20px; padding:30px 26px; width:82%; max-width:300px;
+    text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.4); animation:badge-pop .5s ease; }
+  #badge-card .kicker { font-size:0.72rem; font-weight:700; color:var(--accent-b); text-transform:uppercase; letter-spacing:1px; margin-bottom:14px; }
+  #badge-icon { width:88px; height:88px; border-radius:50%; margin:0 auto 14px; display:flex; align-items:center;
+    justify-content:center; font-size:2.4rem; box-shadow:0 6px 18px rgba(0,0,0,0.3); border:4px solid #fff; }
+  #badge-name { font-size:1.1rem; font-weight:800; color:#1a1a1a; margin-bottom:6px; }
+  #badge-desc { font-size:0.8rem; color:#666; line-height:1.5; margin-bottom:20px; }
+  #badge-dismiss { width:100%; padding:11px; border:none; border-radius:10px; background:var(--accent-a); color:#fff;
+    font-weight:700; font-size:0.85rem; cursor:pointer; }
+  @keyframes badge-pop { 0%{transform:scale(0.5);opacity:0;} 60%{transform:scale(1.08);opacity:1;} 100%{transform:scale(1);opacity:1;} }
+  @keyframes confetti-fall { 0%{transform:translateY(-20px) rotate(0);opacity:1;} 100%{transform:translateY(520px) rotate(540deg);opacity:0;} }
 
-  /* ── Marz tooltip ── */
-  .marz-tooltip {
-    background: rgba(255,255,255,0.92); border: 1px solid #ccc;
-    border-radius: 6px; padding: 4px 8px; font-size: 0.78rem;
-    font-weight: 700; color: #333; box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-    pointer-events: none;
-  }
-  .marz-tooltip::before { display: none; }
+  /* ── Bottom nav ── */
+  #bottom-nav { display:flex; background:#fff; border-top:1px solid #eee; flex-shrink:0; }
+  .nav-item { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:7px 0 9px;
+    font-size:0.64rem; font-weight:600; color:#aaa; cursor:pointer; border:none; background:none; }
+  .nav-item.active { color:var(--accent-a); font-weight:700; }
+  .nav-item .nav-icon { font-size:1.2rem; }
 
-  /* ── Counter ── */
-  #map-counter {
-    position: absolute; top: 10px; right: 10px; z-index: 1000;
-    background: rgba(255,255,255,0.92); border: 1px solid #ddd;
-    border-radius: 8px; padding: 5px 10px; font-size: 0.75rem; color: #777;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.1);
-  }
-  #map-counter span { color: #222; font-weight: 700; }
-
-  /* ── Theme switcher ── */
-  #theme-switcher {
-    position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 1000;
-    display: flex; gap: 3px;
-    background: rgba(255,255,255,0.96); border: 1px solid #ddd;
-    border-radius: 10px; padding: 5px 7px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.13);
-    white-space: nowrap;
-  }
-  .theme-btn {
-    border: none; border-radius: 7px; padding: 5px 11px;
-    font-size: 0.72rem; font-weight: 600; cursor: pointer;
-    background: transparent; color: #555;
-    transition: all 0.15s;
-  }
-  .theme-btn:hover { background: #f0f0f0; color: #222; }
-  .theme-btn.active { background: #c0392b; color: #fff; }
+  /* ── Journey / generic cards ── */
+  .section { padding:0 16px 20px; }
+  .section-title { font-size:0.85rem; font-weight:700; color:#1a1a1a; margin-bottom:10px; }
+  .card { background:#fff; border-radius:12px; box-shadow:0 1px 5px rgba(0,0,0,0.08); }
+  .ring-wrap { position:relative; width:200px; height:200px; margin:22px auto 4px; }
+  .ring-wrap .center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .ring-pct { font-size:2.7rem; font-weight:800; color:#1a1a1a; line-height:1; }
+  .ring-sub { font-size:0.78rem; color:#888; margin-top:5px; }
+  .stat-chips { display:flex; gap:8px; padding:0 16px 18px; }
+  .stat-chip { flex:1; background:#fff; border-radius:12px; padding:10px 4px; text-align:center; box-shadow:0 1px 5px rgba(0,0,0,0.08); }
+  .stat-chip .num { font-size:1.1rem; font-weight:800; color:#1a1a1a; }
+  .stat-chip .lbl { font-size:0.58rem; color:#999; font-weight:600; text-transform:uppercase; margin-top:2px; }
+  .bar-row { display:flex; align-items:center; gap:10px; margin-bottom:11px; }
+  .bar-ico { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; }
+  .bar-main { flex:1; }
+  .bar-head { display:flex; justify-content:space-between; font-size:0.74rem; margin-bottom:3px; }
+  .bar-head .nm { font-weight:600; color:#333; }
+  .bar-head .ct { color:#999; }
+  .mini-track { height:6px; background:#eee; border-radius:3px; overflow:hidden; }
+  .mini-track > div { height:100%; border-radius:3px; }
+  .prov-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .prov-name { width:92px; font-size:0.72rem; font-weight:600; color:#333; flex-shrink:0; }
+  .prov-ct { width:44px; text-align:right; font-size:0.68rem; color:#999; flex-shrink:0; }
+  .hl-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .hl-card { padding:12px; }
+  .hl-ico { font-size:1.3rem; margin-bottom:6px; }
+  .hl-lbl { font-size:0.62rem; color:#999; font-weight:600; text-transform:uppercase; margin-bottom:3px; }
+  .hl-val { font-size:0.8rem; font-weight:700; color:#1a1a1a; }
+  .hl-sub { font-size:0.68rem; color:#888; margin-top:2px; }
+  .badges-strip { display:flex; gap:16px; overflow-x:auto; padding-bottom:4px; }
+  .badge-chip { display:flex; flex-direction:column; align-items:center; gap:6px; flex-shrink:0; width:64px; }
+  .badge-disc { width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:1.6rem; box-shadow:0 3px 10px rgba(0,0,0,0.2); border:3px solid #fff; }
+  .badge-disc.locked { background:#fff; border:2px dashed #ccc; opacity:0.6; font-size:1.4rem; }
+  .badge-cap { font-size:0.6rem; text-align:center; font-weight:600; color:#555; line-height:1.2; }
+  .badge-cap.locked { color:#999; font-weight:500; }
+  .chal-card { padding:12px 14px; margin-bottom:10px; }
+  .chal-head { display:flex; justify-content:space-between; margin-bottom:6px; }
+  .chal-head .nm { font-size:0.78rem; font-weight:700; color:#1a1a1a; }
+  .chal-head .ct { font-size:0.72rem; color:#999; font-weight:600; }
+  .chal-reward { font-size:0.66rem; color:#aaa; margin-top:6px; }
+  .placeholder { padding:40px 24px; text-align:center; color:#888; }
+  .placeholder .big { font-size:2.6rem; margin-bottom:12px; }
+  .placeholder h2 { font-size:1.05rem; color:#333; margin-bottom:8px; }
+  .placeholder p { font-size:0.82rem; line-height:1.5; margin-bottom:6px; }
+  .ghost-btn { margin-top:16px; padding:9px 16px; border:1px solid #ccc; border-radius:9px; background:#fff;
+    font-size:0.78rem; color:#c0392b; font-weight:600; cursor:pointer; }
 </style>
 </head>
 <body>
 
-<div id="header">
-  <h1>🗺 <span>Discover</span> Armenia</h1>
-  <div id="dest-count">0 destinations</div>
+<div id="views">
+
+  <!-- ══════════════ MAP VIEW ══════════════ -->
+  <section id="view-map" class="view active">
+    <div class="app-header">
+      <div class="brand"><span style="font-size:1.15rem;">🗺</span><h1>Discover <span>Armenia</span></h1></div>
+      <div class="avatar" id="map-avatar">EX</div>
+    </div>
+
+    <div id="progress-strip">
+      <div class="row">
+        <span id="progress-label">0% of Armenia explored</span>
+        <span id="progress-count">0 / 0</span>
+      </div>
+      <div class="track"><div id="progress-fill" style="width:0%"></div></div>
+    </div>
+
+    <div id="controls">
+      <input id="search" type="text" placeholder="Search destinations — EN or Հայերեն…">
+      <div id="chips"></div>
+      <div class="controls-row">
+        <select id="prov-select">
+          <option value="ALL">All provinces</option>
+          <option>Aragatsotn</option>
+          <option>Ararat</option>
+          <option>Artsakh</option>
+          <option>Gegharkunik</option>
+          <option>Gegharkunik/Kotayk</option>
+          <option>Kotayk</option>
+          <option>Lori</option>
+          <option>Shirak</option>
+          <option>Syunik</option>
+          <option>Tavush</option>
+          <option>Vayots Dzor</option>
+          <option>Yerevan</option>
+        </select>
+        <div id="state-toggle">
+          <button class="state-btn active" data-state="ALL">All</button>
+          <button class="state-btn" data-state="visited">✓ Visited</button>
+          <button class="state-btn" data-state="wishlist">☆ Wish</button>
+          <button class="state-btn" data-state="unvisited">New</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="map-area">
+      <div id="map"></div>
+      <div id="shown-count" class="map-overlay">Showing <b id="vis-count">0</b> of <b id="total-count">0</b></div>
+      <div id="marz-status" class="map-overlay">⏳ Loading province borders…</div>
+      <div id="state-legend" class="map-overlay"><span>✓ Visited</span><span>☆ Wishlist</span><span class="muted">○ New</span></div>
+      <div id="theme-switcher" class="map-overlay">
+        <button class="theme-btn active" data-theme="relief">🏔 Relief</button>
+        <button class="theme-btn" data-theme="topo">📐 Topo</button>
+        <button class="theme-btn" data-theme="satellite">🛰 Satellite</button>
+        <button class="theme-btn" data-theme="outdoor">🥾 Outdoor</button>
+        <button class="theme-btn" data-theme="street">🗺 Street</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ JOURNEY VIEW ══════════════ -->
+  <section id="view-journey" class="view scroll-view">
+    <div class="app-header">
+      <div class="brand" style="gap:12px;">
+        <div class="avatar" id="journey-avatar" style="width:38px;height:38px;font-size:0.82rem;">EX</div>
+        <div>
+          <div id="journey-name" style="color:#fff;font-weight:700;font-size:0.95rem;">Explorer</div>
+          <div id="journey-level" style="color:#fde68a;font-size:0.7rem;font-weight:600;">🏅 Newcomer · Level 1</div>
+        </div>
+      </div>
+    </div>
+    <div id="journey-body"></div>
+  </section>
+
+  <!-- ══════════════ CHALLENGES VIEW (stub) ══════════════ -->
+  <section id="view-challenges" class="view scroll-view">
+    <div class="app-header"><div class="brand"><span style="font-size:1.15rem;">🎯</span><h1>Challenges</h1></div></div>
+    <div id="challenges-body"></div>
+  </section>
+
+  <!-- ══════════════ PROFILE VIEW (stub) ══════════════ -->
+  <section id="view-profile" class="view scroll-view">
+    <div class="app-header"><div class="brand"><span style="font-size:1.15rem;">👤</span><h1>Profile</h1></div></div>
+    <div id="profile-body"></div>
+  </section>
+
 </div>
 
-<div id="controls">
-  <label>Category:</label>
-  <button class="filter-btn active" data-cat="ALL" style="background:#e94560;color:#fff;">All</button>
-  <button class="filter-btn" data-cat="Mountains &amp; Peaks"    style="background:#4a90d9;color:#fff;">⛰ Mountains</button>
-  <button class="filter-btn" data-cat="Lakes &amp; Rivers"       style="background:#27ae60;color:#fff;">💧 Lakes &amp; Rivers</button>
-  <button class="filter-btn" data-cat="Waterfalls"               style="background:#1abc9c;color:#fff;">🌊 Waterfalls</button>
-  <button class="filter-btn" data-cat="Castles &amp; Fortresses" style="background:#e67e22;color:#fff;">🏰 Castles</button>
-  <button class="filter-btn" data-cat="Caves"                    style="background:#9b59b6;color:#fff;">🪨 Caves</button>
-  <button class="filter-btn" data-cat="Archaeological Sites"     style="background:#c0a020;color:#fff;">🏛 Archaeology</button>
-  <button class="filter-btn" data-cat="Camping Spots"            style="background:#2ecc71;color:#1a1a2e;">⛺ Camping</button>
-  <button class="filter-btn" data-cat="Viewpoints"               style="background:#e07040;color:#fff;">👁 Viewpoints</button>
-  <button class="filter-btn" data-cat="Monasteries"              style="background:#8e44ad;color:#fff;">⛪ Monasteries</button>
-  <button class="filter-btn" data-cat="Canyons &amp; Gorges"     style="background:#16a085;color:#fff;">🏞 Canyons</button>
-  <button class="filter-btn" data-cat="Water sports"             style="background:#2980b9;color:#fff;">🚣 Water sports</button>
-  <div class="sep"></div>
-  <label>Province:</label>
-  <select id="prov-select">
-    <option value="ALL">All provinces</option>
-    <option>Aragatsotn</option>
-    <option>Ararat</option>
-    <option>Artsakh</option>
-    <option>Gegharkunik</option>
-    <option>Gegharkunik/Kotayk</option>
-    <option>Kotayk</option>
-    <option>Lori</option>
-    <option>Shirak</option>
-    <option>Syunik</option>
-    <option>Tavush</option>
-    <option>Vayots Dzor</option>
-    <option>Yerevan</option>
-  </select>
-  <button id="clear-btn">✕ Reset filters</button>
+<!-- ══════════════ OVERLAYS ══════════════ -->
+<div id="sheet-overlay"></div>
+<div id="sheet">
+  <div class="grabber"></div>
+  <div id="sheet-photo"><span class="emoji"></span><img alt=""></div>
+  <div class="sheet-body">
+    <div id="sheet-cat"></div>
+    <div id="sheet-name"></div>
+    <div id="sheet-name-hy"></div>
+    <div id="sheet-grid"></div>
+    <div id="sheet-clubs"></div>
+    <div id="sheet-notes"></div>
+    <div class="action-row">
+      <button id="btn-visited" class="action-btn">✓ Visited</button>
+      <button id="btn-wishlist" class="action-btn">☆ Wishlist</button>
+    </div>
+    <div class="details-toggle" id="details-toggle">＋ Add details</div>
+    <div id="details-panel">
+      <label>Date visited</label>
+      <input type="date" id="detail-date">
+      <label>Note</label>
+      <textarea id="detail-note" placeholder="How was it? Trail conditions, tips…"></textarea>
+      <label>Photos</label>
+      <div id="detail-photos"></div>
+      <input type="file" id="detail-photo-input" accept="image/*" style="font-size:0.72rem;margin-bottom:10px;">
+      <button id="details-save">Save details</button>
+    </div>
+  </div>
 </div>
 
-<div style="position:relative;flex:1;display:flex;flex-direction:column;">
-  <div id="map"></div>
-  <div id="map-counter">Showing <span id="vis-count">0</span> of <span id="total-count">0</span></div>
-  <div id="theme-switcher">
-    <button class="theme-btn active" data-theme="relief">🏔 Relief</button>
-    <button class="theme-btn" data-theme="topo">📐 Topo</button>
-    <button class="theme-btn" data-theme="satellite">🛰 Satellite</button>
-    <button class="theme-btn" data-theme="outdoor">🥾 Outdoor</button>
-    <button class="theme-btn" data-theme="street">🗺 Street</button>
-  </div>
-  <div id="marz-status" style="position:absolute;bottom:6px;left:10px;z-index:1000;background:rgba(255,255,255,0.9);border:1px solid #ddd;border-radius:6px;padding:4px 10px;font-size:0.7rem;color:#666;box-shadow:0 1px 4px rgba(0,0,0,0.1);">⏳ Loading province borders from OSM…</div>
-  <div id="legend">
-    <h4>Categories</h4>
-    <div class="legend-row"><div class="legend-icon" style="background:#4a90d9">⛰</div>Mountains &amp; Peaks</div>
-    <div class="legend-row"><div class="legend-icon" style="background:#27ae60">💧</div>Lakes &amp; Rivers</div>
-    <div class="legend-row"><div class="legend-icon" style="background:#1abc9c">💦</div>Waterfalls</div>
-    <div class="legend-row"><div class="legend-icon" style="background:#e67e22">🏰</div>Castles &amp; Fortresses</div>
-    <div class="legend-row"><div class="legend-icon" style="background:#9b59b6">🕳</div>Caves</div>
-    <div class="legend-row"><div class="legend-icon" style="background:#c0a020">🏛</div>Archaeological Sites</div>
-    <div class="legend-row"><div class="legend-icon" style="background:#2ecc71">⛺</div>Camping Spots</div>
-    <div class="legend-row"><div class="legend-icon" style="background:#e07040">👁</div>Viewpoints</div>
-    <div class="legend-row"><div class="legend-icon" style="background:#8e44ad">⛪</div>Monasteries</div>
-    <div class="legend-row"><div class="legend-icon" style="background:#16a085">🏞</div>Canyons &amp; Gorges</div>
-    <div class="legend-row"><div class="legend-icon" style="background:#2980b9">🚣</div>Water sports</div>
+<div id="toast"></div>
+
+<div id="badge-modal">
+  <div id="confetti-layer"></div>
+  <div id="badge-card">
+    <div class="kicker">🎉 Badge Unlocked</div>
+    <div id="badge-icon">🏔</div>
+    <div id="badge-name">First Summit</div>
+    <div id="badge-desc"></div>
+    <button id="badge-dismiss">Nice!</button>
   </div>
 </div>
+
+<!-- ══════════════ BOTTOM NAV ══════════════ -->
+<nav id="bottom-nav">
+  <button class="nav-item active" data-view="map"><span class="nav-icon">🗺</span>Map</button>
+  <button class="nav-item" data-view="journey"><span class="nav-icon">🏅</span>Journey</button>
+  <button class="nav-item" data-view="challenges"><span class="nav-icon">🎯</span>Challenges</button>
+  <button class="nav-item" data-view="profile"><span class="nav-icon">👤</span>Profile</button>
+</nav>
 
 <script src="destinations.js"></script>
+<script src="state.js"></script>
 <script>
-// ── Destination data ──────────────────────────────────────────────────────────
-// Destination data is loaded from destinations.js (defines global var DESTINATIONS).
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Discover Armenia — single-page exploration app.
+ * Data: destinations.js (global DESTINATIONS, 312 items). State: state.js (UserState).
+ * The map preserves all prior features: Overpass marz borders (+mirror/fallback),
+ * 5 basemap themes, Wikipedia popup images, marz-click spatial filter, PROV_BOUNDS.
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
-// ── Category colors & icons ───────────────────────────────────────────────────
+// ── Category style maps ──
 const CAT_COLORS = {
-  "Mountains & Peaks":    "#4a90d9",
-  "Lakes & Rivers":       "#27ae60",
-  "Waterfalls":           "#1abc9c",
-  "Castles & Fortresses": "#e67e22",
-  "Caves":                "#9b59b6",
-  "Archaeological Sites": "#c0a020",
-  "Camping Spots":        "#2ecc71",
-  "Viewpoints":           "#e07040",
-  "Monasteries":          "#8e44ad",
-  "Canyons & Gorges":     "#16a085",
-  "Water sports":         "#2980b9",
+  "Mountains & Peaks":"#4a90d9","Lakes & Rivers":"#27ae60","Waterfalls":"#1abc9c",
+  "Castles & Fortresses":"#e67e22","Caves":"#9b59b6","Archaeological Sites":"#c0a020",
+  "Camping Spots":"#2ecc71","Viewpoints":"#e07040","Monasteries":"#8e44ad",
+  "Canyons & Gorges":"#16a085","Water sports":"#2980b9"
 };
-
 const CAT_ICONS = {
-  "Mountains & Peaks":    "⛰",
-  "Lakes & Rivers":       "💧",
-  "Waterfalls":           "💦",
-  "Castles & Fortresses": "🏰",
-  "Caves":                "🕳",
-  "Archaeological Sites": "🏛",
-  "Camping Spots":        "⛺",
-  "Viewpoints":           "👁",
-  "Monasteries":          "⛪",
-  "Canyons & Gorges":     "🏞",
-  "Water sports":         "🚣",
+  "Mountains & Peaks":"⛰","Lakes & Rivers":"💧","Waterfalls":"💦","Castles & Fortresses":"🏰",
+  "Caves":"🕳","Archaeological Sites":"🏛","Camping Spots":"⛺","Viewpoints":"👁",
+  "Monasteries":"⛪","Canyons & Gorges":"🏞","Water sports":"🚣"
 };
-
 const CAT_BADGE_BG = {
-  "Mountains & Peaks":    "#d6eaf8",
-  "Lakes & Rivers":       "#d5f5e3",
-  "Waterfalls":           "#d1f2eb",
-  "Castles & Fortresses": "#fdebd0",
-  "Caves":                "#e8daef",
-  "Archaeological Sites": "#fef9e7",
-  "Camping Spots":        "#d5f5e3",
-  "Viewpoints":           "#fde8d8",
-  "Monasteries":          "#ebdef0",
-  "Canyons & Gorges":     "#d1f2eb",
-  "Water sports":         "#d6eaf8",
+  "Mountains & Peaks":"#d6eaf8","Lakes & Rivers":"#d5f5e3","Waterfalls":"#d1f2eb","Castles & Fortresses":"#fdebd0",
+  "Caves":"#e8daef","Archaeological Sites":"#fef9e7","Camping Spots":"#d5f5e3","Viewpoints":"#fde8d8",
+  "Monasteries":"#ebdef0","Canyons & Gorges":"#d1f2eb","Water sports":"#d6eaf8"
 };
+const CAT_ORDER = Object.keys(CAT_COLORS);
+const PROVINCES = ["Aragatsotn","Ararat","Armavir","Gegharkunik","Kotayk","Lori","Shirak","Syunik","Tavush","Vayots Dzor","Yerevan"];
 
-// ── Province bounding boxes (for zoom-to-province) ────────────────────────────
+// ── Province bounding boxes (zoom-to-province) ──
 const PROV_BOUNDS = {
-  "Aragatsotn":          [[40.00, 43.85], [41.10, 44.62]],
-  "Ararat":              [[39.50, 43.78], [40.22, 44.98]],
-  "Artsakh":             [[39.70, 46.00], [40.60, 47.20]],
-  "Gegharkunik":         [[39.85, 44.82], [41.00, 46.10]],
-  "Gegharkunik/Kotayk":  [[39.85, 44.82], [41.00, 46.10]],
-  "Kotayk":              [[39.92, 44.38], [40.82, 45.32]],
-  "Lori":                [[40.58, 43.98], [41.35, 45.25]],
-  "Shirak":              [[40.48, 43.38], [41.32, 44.32]],
-  "Syunik":              [[38.82, 45.32], [39.82, 46.68]],
-  "Tavush":              [[40.40, 44.70], [41.35, 45.88]],
-  "Vayots Dzor":         [[39.38, 44.80], [40.22, 46.08]],
-  "Yerevan":             [[40.04, 44.30], [40.30, 44.72]],
+  "Aragatsotn":[[40.00,43.85],[41.10,44.62]], "Ararat":[[39.50,43.78],[40.22,44.98]],
+  "Artsakh":[[39.70,46.00],[40.60,47.20]], "Gegharkunik":[[39.85,44.82],[41.00,46.10]],
+  "Gegharkunik/Kotayk":[[39.85,44.82],[41.00,46.10]], "Kotayk":[[39.92,44.38],[40.82,45.32]],
+  "Lori":[[40.58,43.98],[41.35,45.25]], "Shirak":[[40.48,43.38],[41.32,44.32]],
+  "Syunik":[[38.82,45.32],[39.82,46.68]], "Tavush":[[40.40,44.70],[41.35,45.88]],
+  "Vayots Dzor":[[39.38,44.80],[40.22,46.08]], "Yerevan":[[40.04,44.30],[40.30,44.72]]
 };
 
-
-// ── Marz (province) GeoJSON – fallback (used if OSM fetch fails) ─────────────
-const FALLBACK_GEOJSON = {"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"Shirak"},"geometry":{"type":"Polygon","coordinates":[[[43.58,41.09],[44.2,41.12],[44.2,40.65],[43.75,40.65],[43.75,40.74],[43.58,41.09]]]}},{"type":"Feature","properties":{"name":"Lori"},"geometry":{"type":"Polygon","coordinates":[[[44.2,41.12],[44.97,41.25],[45.05,40.95],[45.05,40.65],[44.2,40.65],[44.2,41.12]]]}},{"type":"Feature","properties":{"name":"Tavush"},"geometry":{"type":"Polygon","coordinates":[[[44.97,41.25],[45.18,40.99],[45.56,40.81],[45.36,40.56],[45.1,40.65],[45.05,40.65],[45.05,40.95],[44.97,41.25]]]}},{"type":"Feature","properties":{"name":"Aragatsotn"},"geometry":{"type":"Polygon","coordinates":[[[43.75,40.74],[43.66,40.25],[44.4,40.01],[44.55,40.0],[44.55,40.65],[44.2,40.65],[43.75,40.65],[43.75,40.74]]]}},{"type":"Feature","properties":{"name":"Yerevan"},"geometry":{"type":"Polygon","coordinates":[[[44.38,40.25],[44.65,40.25],[44.65,40.05],[44.38,40.05],[44.38,40.25]]]}},{"type":"Feature","properties":{"name":"Kotayk"},"geometry":{"type":"Polygon","coordinates":[[[44.55,40.65],[45.1,40.65],[45.1,40.0],[44.55,40.0],[44.55,40.65]]]}},{"type":"Feature","properties":{"name":"Gegharkunik"},"geometry":{"type":"Polygon","coordinates":[[[45.1,40.65],[45.36,40.56],[45.89,40.22],[45.61,39.9],[45.85,39.9],[45.85,40.0],[45.1,40.0],[45.1,40.65]]]}},{"type":"Feature","properties":{"name":"Ararat"},"geometry":{"type":"Polygon","coordinates":[[[44.4,40.01],[44.55,40.0],[44.9,40.0],[44.9,39.6],[45.0,39.74],[44.79,39.71],[44.4,40.01]]]}},{"type":"Feature","properties":{"name":"Vayots Dzor"},"geometry":{"type":"Polygon","coordinates":[[[44.9,40.0],[45.85,40.0],[45.85,39.9],[46.03,39.63],[45.55,39.65],[45.3,39.47],[45.0,39.74],[44.9,39.6],[44.9,40.0]]]}},{"type":"Feature","properties":{"name":"Syunik"},"geometry":{"type":"Polygon","coordinates":[[[45.55,39.65],[46.03,39.63],[46.48,39.46],[46.51,38.77],[46.14,38.74],[45.74,39.32],[45.74,39.47],[45.3,39.47],[45.55,39.65]]]}}]};
-
-// OSM name:en → our internal province key (all known variants)
+// ── Marz name normalization (OSM → our keys) ──
 const OSM_TO_PROV = {
-  "Shirak":"Shirak","Lori":"Lori","Tavush":"Tavush",
-  "Aragatsotn":"Aragatsotn","Kotayk":"Kotayk",
+  "Shirak":"Shirak","Lori":"Lori","Tavush":"Tavush","Aragatsotn":"Aragatsotn","Kotayk":"Kotayk",
   "Gegharkunik":"Gegharkunik","Geghark’unik’":"Gegharkunik","Gegharkunik’":"Gegharkunik",
   "Ararat":"Ararat","Vayots Dzor":"Vayots Dzor","Vayots’ Dzor":"Vayots Dzor","Vayotz Dzor":"Vayots Dzor",
-  "Syunik":"Syunik","Yerevan":"Yerevan",
-  "Aragatsotn Province":"Aragatsotn","Aragatsotn Marz":"Aragatsotn",
-  "Ararat Province":"Ararat","Ararat Marz":"Ararat",
-  "Gegharkunik Province":"Gegharkunik","Gegharkunik Marz":"Gegharkunik",
-  "Kotayk Province":"Kotayk","Kotayk Marz":"Kotayk",
-  "Lori Province":"Lori","Lori Marz":"Lori",
-  "Shirak Province":"Shirak","Shirak Marz":"Shirak",
-  "Syunik Province":"Syunik","Syunik Marz":"Syunik",
-  "Tavush Province":"Tavush","Tavush Marz":"Tavush",
-  "Vayots Dzor Province":"Vayots Dzor","Vayots Dzor Marz":"Vayots Dzor",
-  "Yerevan City":"Yerevan","City of Yerevan":"Yerevan","Yerevan Province":"Yerevan",
+  "Syunik":"Syunik","Yerevan":"Yerevan","Armavir":"Armavir",
+  "Aragatsotn Province":"Aragatsotn","Ararat Province":"Ararat","Gegharkunik Province":"Gegharkunik",
+  "Kotayk Province":"Kotayk","Lori Province":"Lori","Shirak Province":"Shirak","Syunik Province":"Syunik",
+  "Tavush Province":"Tavush","Vayots Dzor Province":"Vayots Dzor","Armavir Province":"Armavir",
+  "Yerevan City":"Yerevan","City of Yerevan":"Yerevan","Yerevan Province":"Yerevan"
 };
-
-// Robust normalizer: checks map, then strips common OSM suffixes, then falls back to raw
 function normalizeProvName(raw) {
   if (!raw) return raw;
   if (OSM_TO_PROV[raw]) return OSM_TO_PROV[raw];
   const stripped = raw.replace(/\s+(Province|Marz|Region|City|Marzer)\s*$/i, '').trim();
   return OSM_TO_PROV[stripped] || stripped;
 }
+// A destination's primary province = normalized first segment of its province field.
+function primaryProvince(d) { return normalizeProvName(String(d.province).split('/')[0].trim()); }
 
-// ── Map init ──────────────────────────────────────────────────────────────────
-const map = L.map('map', { zoomControl: true }).setView([40.18, 44.95], 7);
-
-// ── Tile theme definitions ────────────────────────────────────────────────────
-const TILE_THEMES = {
-  relief: {
-    label: 'Relief',
-    layers: [
-      { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',
-        opts: { attribution: '&copy; Esri', maxZoom: 18 } },
-      { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-        opts: { maxZoom: 18 } }
-    ]
-  },
-  topo: {
-    label: 'Topo',
-    layers: [
-      { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-        opts: { attribution: '&copy; Esri', maxZoom: 18 } }
-    ]
-  },
-  satellite: {
-    label: 'Satellite',
-    layers: [
-      { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        opts: { attribution: '&copy; Esri', maxZoom: 18 } },
-      { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-        opts: { maxZoom: 18, opacity: 0.85 } }
-    ]
-  },
-  outdoor: {
-    label: 'Outdoor',
-    layers: [
-      { url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
-        opts: { attribution: '&copy; OpenTopoMap', maxZoom: 17 } }
-    ]
-  },
-  street: {
-    label: 'Street',
-    layers: [
-      { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-        opts: { attribution: '&copy; CartoDB', subdomains: 'abcd', maxZoom: 19 } }
-    ]
-  }
-};
-
-let activeTileLayers = [];
-
-function setTheme(themeId) {
-  // Remove current tile layers
-  activeTileLayers.forEach(l => map.removeLayer(l));
-  activeTileLayers = [];
-
-  const theme = TILE_THEMES[themeId];
-  if (!theme) return;
-
-  theme.layers.forEach(cfg => {
-    const l = L.tileLayer(cfg.url, cfg.opts).addTo(map);
-    activeTileLayers.push(l);
-  });
-
-  // Keep GeoJSON layers on top (they live in overlay pane, naturally above tiles)
-  // Update button states
-  document.querySelectorAll('.theme-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.theme === themeId);
-  });
+function diffBadge(diff) {
+  if (!diff) return '<span style="color:#bbb;">—</span>';
+  const colors = { Easy:'#27ae60', Medium:'#f39c12', Hard:'#e74c3c', Moderate:'#e67e22' };
+  const key = Object.keys(colors).find(k => diff.startsWith(k)) || 'Easy';
+  return '<span style="background:'+colors[key]+';color:#fff;padding:1px 6px;border-radius:8px;font-size:0.66rem;font-weight:700;">'+diff+'</span>';
+}
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function clubsText(d) {
+  const n = d.popularity || 0;
+  if (!n) return 'Not yet run by a listed hiking club';
+  return 'Run by ' + n + ' hiking club' + (n === 1 ? '' : 's');
 }
 
-// Start with Relief theme
+/* ═══════════════ MAP ═══════════════ */
+const map = L.map('map', { zoomControl:true }).setView([40.18, 44.95], 7);
+
+const TILE_THEMES = {
+  relief: { layers: [
+    { url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}', opts:{ attribution:'&copy; Esri', maxZoom:18 } },
+    { url:'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', opts:{ maxZoom:18 } } ] },
+  topo: { layers: [
+    { url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', opts:{ attribution:'&copy; Esri', maxZoom:18 } } ] },
+  satellite: { layers: [
+    { url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opts:{ attribution:'&copy; Esri', maxZoom:18 } },
+    { url:'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', opts:{ maxZoom:18, opacity:0.85 } } ] },
+  outdoor: { layers: [
+    { url:'https://tile.opentopomap.org/{z}/{x}/{y}.png', opts:{ attribution:'&copy; OpenTopoMap', maxZoom:17 } } ] },
+  street: { layers: [
+    { url:'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', opts:{ attribution:'&copy; CartoDB', subdomains:'abcd', maxZoom:19 } } ] }
+};
+let activeTileLayers = [];
+function setTheme(themeId) {
+  activeTileLayers.forEach(l => map.removeLayer(l));
+  activeTileLayers = [];
+  const theme = TILE_THEMES[themeId];
+  if (!theme) return;
+  theme.layers.forEach(cfg => { activeTileLayers.push(L.tileLayer(cfg.url, cfg.opts).addTo(map)); });
+  document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === themeId));
+}
 setTheme('relief');
+document.querySelectorAll('.theme-btn').forEach(btn => btn.addEventListener('click', () => setTheme(btn.dataset.theme)));
 
-// Theme button clicks
-document.querySelectorAll('.theme-btn').forEach(btn => {
-  btn.addEventListener('click', () => setTheme(btn.dataset.theme));
-});
-
-// ── Marz boundary layer ───────────────────────────────────────────────────────
-const STYLE_DEFAULT  = { color: '#3a5a8a', weight: 1.5, opacity: 0.5, fillOpacity: 0, fillColor: '#3a7ab5' };
-const STYLE_HOVER    = { color: '#1a5c9e', weight: 2.5, opacity: 0.9, fillOpacity: 0.10, fillColor: '#3a7ab5' };
-const STYLE_SELECTED = { color: '#c0392b', weight: 3,   opacity: 1,   fillOpacity: 0.14, fillColor: '#e74c3c' };
-
-let selectedMarz = null;
-let marzLayer = null;
+// ── Marz boundary layer (Overpass + mirrors, fallback polygons) ──
+const FALLBACK_GEOJSON = {"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"Shirak"},"geometry":{"type":"Polygon","coordinates":[[[43.58,41.09],[44.2,41.12],[44.2,40.65],[43.75,40.65],[43.75,40.74],[43.58,41.09]]]}},{"type":"Feature","properties":{"name":"Lori"},"geometry":{"type":"Polygon","coordinates":[[[44.2,41.12],[44.97,41.25],[45.05,40.95],[45.05,40.65],[44.2,40.65],[44.2,41.12]]]}},{"type":"Feature","properties":{"name":"Tavush"},"geometry":{"type":"Polygon","coordinates":[[[44.97,41.25],[45.18,40.99],[45.56,40.81],[45.36,40.56],[45.1,40.65],[45.05,40.65],[45.05,40.95],[44.97,41.25]]]}},{"type":"Feature","properties":{"name":"Aragatsotn"},"geometry":{"type":"Polygon","coordinates":[[[43.75,40.74],[43.66,40.25],[44.4,40.01],[44.55,40.0],[44.55,40.65],[44.2,40.65],[43.75,40.65],[43.75,40.74]]]}},{"type":"Feature","properties":{"name":"Yerevan"},"geometry":{"type":"Polygon","coordinates":[[[44.38,40.25],[44.65,40.25],[44.65,40.05],[44.38,40.05],[44.38,40.25]]]}},{"type":"Feature","properties":{"name":"Kotayk"},"geometry":{"type":"Polygon","coordinates":[[[44.55,40.65],[45.1,40.65],[45.1,40.0],[44.55,40.0],[44.55,40.65]]]}},{"type":"Feature","properties":{"name":"Gegharkunik"},"geometry":{"type":"Polygon","coordinates":[[[45.1,40.65],[45.36,40.56],[45.89,40.22],[45.61,39.9],[45.85,39.9],[45.85,40.0],[45.1,40.0],[45.1,40.65]]]}},{"type":"Feature","properties":{"name":"Ararat"},"geometry":{"type":"Polygon","coordinates":[[[44.4,40.01],[44.55,40.0],[44.9,40.0],[44.9,39.6],[45.0,39.74],[44.79,39.71],[44.4,40.01]]]}},{"type":"Feature","properties":{"name":"Vayots Dzor"},"geometry":{"type":"Polygon","coordinates":[[[44.9,40.0],[45.85,40.0],[45.85,39.9],[46.03,39.63],[45.55,39.65],[45.3,39.47],[45.0,39.74],[44.9,39.6],[44.9,40.0]]]}},{"type":"Feature","properties":{"name":"Syunik"},"geometry":{"type":"Polygon","coordinates":[[[45.55,39.65],[46.03,39.63],[46.48,39.46],[46.51,38.77],[46.14,38.74],[45.74,39.32],[45.74,39.47],[45.3,39.47],[45.55,39.65]]]}}]};
+const STYLE_DEFAULT  = { color:'#3a5a8a', weight:1.5, opacity:0.5, fillOpacity:0, fillColor:'#3a7ab5' };
+const STYLE_HOVER    = { color:'#1a5c9e', weight:2.5, opacity:0.9, fillOpacity:0.10, fillColor:'#3a7ab5' };
+const STYLE_SELECTED = { color:'#c0392b', weight:3,   opacity:1,   fillOpacity:0.14, fillColor:'#e74c3c' };
+let selectedMarz = null, marzLayer = null;
 
 function initMarzLayer(geojsonData, nameGetter) {
   if (marzLayer) map.removeLayer(marzLayer);
-
   marzLayer = L.geoJSON(geojsonData, {
     style: STYLE_DEFAULT,
     filter: f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'),
     onEachFeature(feature, layer) {
-      const rawName = nameGetter(feature);
-      const name = normalizeProvName(rawName);
-
-      layer.bindTooltip(`<b>${name}</b>`, {
-        permanent: false, sticky: true,
-        className: 'marz-tooltip', direction: 'center'
-      });
-
+      const name = normalizeProvName(nameGetter(feature));
+      layer.bindTooltip('<b>'+name+'</b>', { permanent:false, sticky:true, className:'marz-tooltip', direction:'center' });
       layer.on({
         mouseover() { if (layer !== selectedMarz) layer.setStyle(STYLE_HOVER); },
         mouseout()  { if (layer !== selectedMarz) marzLayer.resetStyle(layer); },
         click(e) {
           if (selectedMarz && selectedMarz !== layer) marzLayer.resetStyle(selectedMarz);
-
           if (selectedMarz === layer) {
-            // Deselect
             marzLayer.resetStyle(layer); selectedMarz = null;
             activeMarzGeom = null; activeProv = 'ALL';
             document.getElementById('prov-select').value = 'ALL';
-            map.setView([40.18, 44.95], 7); applyFilters();
+            map.setView([40.18,44.95], 7); applyFilters();
           } else {
-            // Select — use geometry for spatial filtering (no name-matching needed)
             layer.setStyle(STYLE_SELECTED); layer.bringToFront(); selectedMarz = layer;
-            activeMarzGeom = feature.geometry;
-            activeProv = name; // sync dropdown if name matches
-            const matchingOpt = [...document.querySelectorAll('#prov-select option')]
-              .find(o => o.value === name || o.text === name);
-            document.getElementById('prov-select').value = matchingOpt ? matchingOpt.value : 'ALL';
+            activeMarzGeom = feature.geometry; activeProv = name;
+            const opt = [...document.querySelectorAll('#prov-select option')].find(o => o.value === name || o.text === name);
+            document.getElementById('prov-select').value = opt ? opt.value : 'ALL';
             applyFilters();
             const bounds = PROV_BOUNDS[name];
-            if (bounds) map.fitBounds(bounds, { padding: [30, 30] });
+            if (bounds) map.fitBounds(bounds, { padding:[30,30] });
             else map.fitBounds(layer.getBounds().pad(0.15));
           }
           L.DomEvent.stopPropagation(e);
@@ -435,8 +480,6 @@ function initMarzLayer(geojsonData, nameGetter) {
     }
   }).addTo(map);
 }
-
-// Click on map background → deselect marz
 map.on('click', () => {
   if (selectedMarz && marzLayer) {
     marzLayer.resetStyle(selectedMarz); selectedMarz = null;
@@ -445,266 +488,575 @@ map.on('click', () => {
     applyFilters();
   }
 });
-
-// ── Load marz borders (Overpass API, POST + mirror fallback) ─────────────────
 (function loadMarzBorders() {
   const statusEl = document.getElementById('marz-status');
   const query = '[out:json][timeout:55];area["ISO3166-1"="AM"]->.a;relation["boundary"="administrative"]["admin_level"="4"](area.a);out body;>;out skel qt;';
-  const MIRRORS = [
-    'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter',
-    'https://lz4.overpass-api.de/api/interpreter',
-  ];
-
+  const MIRRORS = ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://lz4.overpass-api.de/api/interpreter'];
   function postMirror(url) {
-    return fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'data=' + encodeURIComponent(query)
-    }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+    return fetch(url, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'data='+encodeURIComponent(query) })
+      .then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
   }
-
   function tryNext(idx) {
     if (idx >= MIRRORS.length) return Promise.reject(new Error('All mirrors failed'));
     return postMirror(MIRRORS[idx]).catch(() => tryNext(idx + 1));
   }
-
-  tryNext(0)
-    .then(osmData => {
-      if (typeof osmtogeojson !== 'function') throw new Error('osmtogeojson not loaded');
-      const geojson = osmtogeojson(osmData);
-      const features = (geojson.features || []).filter(f =>
-        f.geometry &&
-        (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') &&
-        f.properties && f.properties['admin_level'] === '4'
-      );
-      if (features.length === 0) throw new Error('No marz features');
-      initMarzLayer({ type: 'FeatureCollection', features },
-        f => f.properties['name:en'] || f.properties.name);
-      if (statusEl) statusEl.style.display = 'none';
-    })
-    .catch(err => {
-      console.warn('Marz fetch failed, using fallback:', err.message);
-      initMarzLayer(FALLBACK_GEOJSON, f => f.properties.name);
-      if (statusEl) {
-        statusEl.textContent = '⚠ Using approximate borders';
-        statusEl.style.color = '#e67e22';
-        setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
-      }
-    });
+  tryNext(0).then(osmData => {
+    if (typeof osmtogeojson !== 'function') throw new Error('osmtogeojson not loaded');
+    const geojson = osmtogeojson(osmData);
+    const features = (geojson.features || []).filter(f => f.geometry &&
+      (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') &&
+      f.properties && f.properties['admin_level'] === '4');
+    if (features.length === 0) throw new Error('No marz features');
+    initMarzLayer({ type:'FeatureCollection', features }, f => f.properties['name:en'] || f.properties.name);
+    if (statusEl) statusEl.style.display = 'none';
+  }).catch(err => {
+    console.warn('Marz fetch failed, using fallback:', err.message);
+    initMarzLayer(FALLBACK_GEOJSON, f => f.properties.name);
+    if (statusEl) { statusEl.textContent = '⚠ Approximate borders'; statusEl.style.color = '#e67e22';
+      setTimeout(() => { statusEl.style.display = 'none'; }, 4000); }
+  });
 })();
-
-// ── Load Armenia country border (separate lightweight fetch) ──────────────────
 (function loadCountryBorder() {
-  // georgique/world-geojson: pre-built Armenia outline, ~75KB, no conversion needed
-  const url = 'https://raw.githubusercontent.com/georgique/world-geojson/develop/countries/armenia.json';
-  fetch(url)
-    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(geojson => {
-      L.geoJSON(geojson, {
-        style: { color: '#1a3a5c', weight: 3, opacity: 0.85, fillOpacity: 0, lineJoin: 'round' },
-        interactive: false
-      }).addTo(map);
-    })
+  fetch('https://raw.githubusercontent.com/georgique/world-geojson/develop/countries/armenia.json')
+    .then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(geojson => { L.geoJSON(geojson, { style:{ color:'#1a3a5c', weight:3, opacity:0.85, fillOpacity:0, lineJoin:'round' }, interactive:false }).addTo(map); })
     .catch(err => console.warn('Country border fetch failed:', err.message));
 })();
 
-
-// ── Marker creation ───────────────────────────────────────────────────────────
-function makeIcon(cat) {
-  const color = CAT_COLORS[cat] || '#aaa';
-  const emoji = CAT_ICONS[cat] || '📍';
-  const html = `<div style="
-    background:${color};
-    width:32px;height:32px;
-    border-radius:50%;
-    display:flex;align-items:center;justify-content:center;
-    font-size:16px;line-height:1;
-    box-shadow:0 2px 8px rgba(0,0,0,0.5);
-    border:2.5px solid #fff;
-    outline:1px solid rgba(0,0,0,0.15);
-  ">${emoji}</div>`;
-  return L.divIcon({
-    html,
-    className: '',
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -18]
-  });
-}
-
-function diffBadge(diff) {
-  const colors = { Easy: '#27ae60', Medium: '#f39c12', Hard: '#e74c3c', Moderate: '#e67e22' };
-  const key = Object.keys(colors).find(k => diff && diff.startsWith(k)) || 'Easy';
-  return `<span style="background:${colors[key]};color:#fff;padding:1px 6px;border-radius:8px;font-size:0.65rem;font-weight:700;">${diff}</span>`;
-}
-
-// ── Wikipedia image fetch ─────────────────────────────────────────────────────
-const wikiCache = {};
-
-function fetchWikiImage(destName, wrapEl) {
-  if (wikiCache[destName] !== undefined) {
-    applyWikiImage(wikiCache[destName], wrapEl); return;
-  }
-  // Clean name: strip parentheticals and trailing descriptor words
-  const cleaned = destName
-    .replace(/\s*\([^)]*\)\s*/g, ' ')
-    .replace(/\s+(hike approach|speleo hike|aerial tram|7 volcanoes|2-day trek|spring flowers|camping)\s*$/i, '')
-    .replace(/\s+/g, ' ').trim();
-
-  fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(cleaned))
-    .then(r => r.ok ? r.json() : Promise.reject())
-    .then(data => {
-      // Upgrade thumbnail to 400px width
-      const src = data.thumbnail?.source?.replace(/\/\d+px-/, '/400px-') || null;
-      wikiCache[destName] = src;
-      applyWikiImage(src, wrapEl);
-    })
-    .catch(() => { wikiCache[destName] = null; });
-}
-
-function applyWikiImage(src, wrapEl) {
-  if (!src || !wrapEl) return;
-  const img = wrapEl.querySelector('.popup-img');
-  img.onload = () => { img.style.display = 'block'; };
-  img.onerror = () => {};
-  img.src = src;
-}
-
-function makePopup(d) {
-  const color = CAT_COLORS[d.category] || '#888';
-  const bg    = CAT_BADGE_BG[d.category] || '#f0f0f0';
-  const emoji = CAT_ICONS[d.category] || '📍';
-  return `<div>
-    <div class="popup-img-wrap">
-      <span class="popup-img-placeholder">${emoji}</span>
-      <img class="popup-img" alt="${d.name}">
-    </div>
-    <div class="popup-inner">
-      <div class="popup-cat" style="background:${bg};color:${color};">${d.category}</div>
-      <div class="popup-name">${d.name}</div>
-      <div class="popup-grid">
-        <div class="lbl">Province</div><div class="val">${d.province}</div>
-        <div class="lbl">Elevation</div><div class="val">${d.elevation ? d.elevation.toLocaleString() + ' m' : '—'}</div>
-        <div class="lbl">Difficulty</div><div class="val">${diffBadge(d.difficulty)}</div>
-        <div class="lbl">Best season</div><div class="val">${d.season || '—'}</div>
-      </div>
-      ${d.notes ? `<div class="popup-notes">${d.notes}</div>` : ''}
-    </div>
-  </div>`;
-}
-
-// ── Build markers ─────────────────────────────────────────────────────────────
-const markers = DESTINATIONS.map(d => {
-  if (!d.lat || !d.lon) return null;
-  const m = L.marker([d.lat, d.lon], { icon: makeIcon(d.category) });
-  m.bindPopup(makePopup(d), { maxWidth: 300 });
-  m._destData = d;
-  m.on('popupopen', () => {
-    const wrapEl = document.querySelector('.leaflet-popup-content .popup-img-wrap');
-    if (wrapEl) fetchWikiImage(d.name, wrapEl);
-  });
-  return m;
-}).filter(Boolean);
-
-const markerGroup = L.layerGroup(markers).addTo(map);
-
-// Dynamic counts (derived from the data, not hardcoded)
-const TOTAL_DEST = markers.length;
-document.getElementById('dest-count').textContent = TOTAL_DEST + ' destinations';
-document.getElementById('total-count').textContent = TOTAL_DEST;
-document.getElementById('vis-count').textContent = TOTAL_DEST;
-
-// ── Point-in-polygon (ray casting) ───────────────────────────────────────────
+// ── Point-in-polygon (marz spatial filter) ──
 function pointInRing(lat, lon, ring) {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const xi = ring[i][0], yi = ring[i][1]; // GeoJSON: [lon, lat]
-    const xj = ring[j][0], yj = ring[j][1];
-    if (((yi > lat) !== (yj > lat)) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)
-      inside = !inside;
+    const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    if (((yi > lat) !== (yj > lat)) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) inside = !inside;
   }
   return inside;
 }
 function pointInGeometry(lat, lon, geom) {
   if (!geom) return false;
-  if (geom.type === 'Polygon')
-    return pointInRing(lat, lon, geom.coordinates[0]);
-  if (geom.type === 'MultiPolygon')
-    return geom.coordinates.some(poly => pointInRing(lat, lon, poly[0]));
+  if (geom.type === 'Polygon') return pointInRing(lat, lon, geom.coordinates[0]);
+  if (geom.type === 'MultiPolygon') return geom.coordinates.some(poly => pointInRing(lat, lon, poly[0]));
   return false;
 }
 
-// ── Filter logic ──────────────────────────────────────────────────────────────
-let activeCat = 'ALL';
-let activeProv = 'ALL';
-let activeMarzGeom = null; // geometry of clicked marz (spatial filter)
+// ── Personalized pins ──
+function pinHtml(d, status) {
+  const color = CAT_COLORS[d.category] || '#aaa';
+  const emoji = CAT_ICONS[d.category] || '📍';
+  if (status === 'visited') {
+    return '<div style="position:relative;width:34px;height:34px;">'
+      + '<div style="width:34px;height:34px;border-radius:50%;background:'+color+';display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 8px rgba(0,0,0,0.45);border:2.5px solid #fff;">'+emoji+'</div>'
+      + '<div style="position:absolute;top:-3px;right:-3px;width:15px;height:15px;border-radius:50%;background:#27ae60;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:900;">✓</div></div>';
+  }
+  if (status === 'wishlist') {
+    return '<div style="position:relative;width:34px;height:34px;">'
+      + '<div style="width:34px;height:34px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.3);border:2.5px solid '+color+';">'+emoji+'</div>'
+      + '<div style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#f1c40f;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:9px;">★</div></div>';
+  }
+  // unvisited — keep category color/emoji readable, just smaller & slightly muted
+  return '<div style="width:27px;height:27px;border-radius:50%;background:'+color+';opacity:0.9;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 1px 5px rgba(0,0,0,0.35);border:2px solid #fff;">'+emoji+'</div>';
+}
+function makeIcon(d, status) {
+  const big = status !== 'unvisited';
+  return L.divIcon({ html: pinHtml(d, status), className:'', iconSize: big?[34,34]:[27,27], iconAnchor: big?[17,17]:[13,13], popupAnchor:[0,-16] });
+}
 
+// ── Build markers ──
+const markerById = {};
+const markers = [];
+const markerGroup = L.layerGroup().addTo(map);
+DESTINATIONS.forEach(d => {
+  if (!d.lat || !d.lon) return;
+  const status = UserState.statusOf(d.id);
+  const m = L.marker([d.lat, d.lon], { icon: makeIcon(d, status) });
+  m._destData = d;
+  if (status !== 'unvisited') m.setZIndexOffset(500);
+  m.on('click', () => openSheet(d));
+  markerById[d.id] = m;
+  markers.push(m);
+  markerGroup.addLayer(m);
+});
+document.getElementById('total-count').textContent = markers.length;
+
+function refreshMarker(id) {
+  const m = markerById[id];
+  if (!m) return;
+  const status = UserState.statusOf(id);
+  m.setIcon(makeIcon(m._destData, status));
+  m.setZIndexOffset(status !== 'unvisited' ? 500 : 0);
+}
+
+/* ═══════════════ FILTERS ═══════════════ */
+let activeCat = 'ALL', activeState = 'ALL', activeProv = 'ALL', activeMarzGeom = null, searchTerm = '';
 function applyFilters() {
   let visible = 0;
   markers.forEach(m => {
     const d = m._destData;
-    const catOk  = activeCat === 'ALL' || d.category === activeCat;
+    const status = UserState.statusOf(d.id);
+    const catOk = activeCat === 'ALL' || d.category === activeCat;
+    const stateOk = activeState === 'ALL' || status === activeState;
     let provOk;
-    if (activeMarzGeom) {
-      // Spatial check — works regardless of province name spelling
-      provOk = pointInGeometry(d.lat, d.lon, activeMarzGeom);
-    } else {
-      provOk = activeProv === 'ALL' ||
-               d.province === activeProv ||
-               d.province.split('/').some(p => p.trim() === activeProv);
-    }
-    if (catOk && provOk) {
-      markerGroup.addLayer(m);
-      visible++;
-    } else {
-      markerGroup.removeLayer(m);
-    }
+    if (activeMarzGeom) provOk = pointInGeometry(d.lat, d.lon, activeMarzGeom);
+    else provOk = activeProv === 'ALL' || d.province === activeProv || d.province.split('/').some(p => p.trim() === activeProv);
+    const searchOk = !searchTerm || d.name.toLowerCase().includes(searchTerm) || (d.nameHy && d.nameHy.toLowerCase().includes(searchTerm));
+    if (catOk && stateOk && provOk && searchOk) { markerGroup.addLayer(m); visible++; }
+    else markerGroup.removeLayer(m);
   });
   document.getElementById('vis-count').textContent = visible;
 }
 
-// Category buttons
-document.querySelectorAll('.filter-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    activeCat = btn.dataset.cat;
-    applyFilters();
-  });
+// Category chips (generated from CAT_COLORS)
+const chipsWrap = document.getElementById('chips');
+const allChip = document.createElement('button');
+allChip.className = 'filter-btn active'; allChip.style.background = '#2f3e46'; allChip.style.color = '#fff';
+allChip.textContent = 'All'; allChip.dataset.cat = 'ALL'; chipsWrap.appendChild(allChip);
+CAT_ORDER.forEach(cat => {
+  const b = document.createElement('button');
+  b.className = 'filter-btn'; b.style.background = CAT_COLORS[cat]; b.style.color = '#fff';
+  b.textContent = CAT_ICONS[cat] + ' ' + cat.replace(' & ', ' & ').split(' ')[0];
+  b.dataset.cat = cat; chipsWrap.appendChild(b);
 });
-
-// Province select
+chipsWrap.addEventListener('click', e => {
+  const b = e.target.closest('.filter-btn'); if (!b) return;
+  chipsWrap.querySelectorAll('.filter-btn').forEach(x => x.classList.remove('active'));
+  b.classList.add('active'); activeCat = b.dataset.cat; applyFilters();
+});
+document.getElementById('state-toggle').addEventListener('click', e => {
+  const b = e.target.closest('.state-btn'); if (!b) return;
+  document.querySelectorAll('.state-btn').forEach(x => x.classList.remove('active'));
+  b.classList.add('active'); activeState = b.dataset.state; applyFilters();
+});
 document.getElementById('prov-select').addEventListener('change', e => {
-  activeProv = e.target.value;
+  activeProv = e.target.value; activeMarzGeom = null;
+  if (selectedMarz && marzLayer) { marzLayer.resetStyle(selectedMarz); selectedMarz = null; }
   if (activeProv !== 'ALL') {
-    // Zoom to predefined province bounding box
     const bounds = PROV_BOUNDS[activeProv];
-    if (bounds) {
-      map.fitBounds(bounds, { padding: [30, 30] });
-    } else {
-      // Fallback: zoom to markers in that province
-      const pts = markers.filter(m => m._destData.province === activeProv);
-      if (pts.length) map.fitBounds(L.featureGroup(pts).getBounds().pad(0.3));
-    }
-  } else {
-    map.setView([40.18, 44.95], 7);
-  }
+    if (bounds) map.fitBounds(bounds, { padding:[30,30] });
+    else { const pts = markers.filter(m => m._destData.province.split('/').some(p => p.trim() === activeProv));
+      if (pts.length) map.fitBounds(L.featureGroup(pts).getBounds().pad(0.3)); }
+  } else map.setView([40.18,44.95], 7);
   applyFilters();
+});
+document.getElementById('search').addEventListener('input', e => { searchTerm = e.target.value.trim().toLowerCase(); applyFilters(); });
+
+/* ═══════════════ WIKIPEDIA IMAGES (preserved, now in the sheet) ═══════════════ */
+const wikiCache = {};
+function fetchWikiImage(name, imgEl) {
+  if (!imgEl) return;
+  if (wikiCache[name] !== undefined) { applyWikiImage(wikiCache[name], imgEl); return; }
+  const cleaned = name.replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\s+(hike approach|speleo hike|aerial tram|7 volcanoes|2-day trek|spring flowers|camping)\s*$/i, '')
+    .replace(/\s+/g, ' ').trim();
+  fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(cleaned))
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(data => {
+      const src = (data.thumbnail && data.thumbnail.source) ? data.thumbnail.source.replace(/\/\d+px-/, '/400px-') : null;
+      wikiCache[name] = src; applyWikiImage(src, imgEl);
+    })
+    .catch(() => { wikiCache[name] = null; });
+}
+function applyWikiImage(src, imgEl) {
+  if (!src) return;
+  // Only apply if the sheet still shows the same destination
+  if (imgEl.dataset.for && currentDest && imgEl.dataset.for !== currentDest.id) return;
+  imgEl.onload = () => { imgEl.style.display = 'block'; };
+  imgEl.src = src;
+}
+
+/* ═══════════════ BOTTOM SHEET ═══════════════ */
+const sheet = document.getElementById('sheet');
+const sheetOverlay = document.getElementById('sheet-overlay');
+let currentDest = null;
+
+function openSheet(d) {
+  currentDest = d;
+  const img = document.querySelector('#sheet-photo img');
+  const ph = document.querySelector('#sheet-photo .emoji');
+  ph.textContent = CAT_ICONS[d.category] || '📍';
+  img.style.display = 'none'; img.src = ''; img.dataset.for = d.id;
+  fetchWikiImage(d.name, img);
+
+  const cat = document.getElementById('sheet-cat');
+  cat.textContent = d.category;
+  cat.style.background = CAT_BADGE_BG[d.category] || '#eee';
+  cat.style.color = CAT_COLORS[d.category] || '#666';
+  document.getElementById('sheet-name').textContent = d.name;
+  const hy = document.getElementById('sheet-name-hy');
+  hy.textContent = d.nameHy || ''; hy.style.display = d.nameHy ? 'block' : 'none';
+  document.getElementById('sheet-grid').innerHTML =
+    '<div><div class="k">Elevation</div><div class="v">'+(d.elevation ? d.elevation.toLocaleString()+' m' : '—')+'</div></div>'
+    + '<div><div class="k">Difficulty</div><div class="v">'+diffBadge(d.difficulty)+'</div></div>'
+    + '<div><div class="k">Season</div><div class="v">'+(d.season || '—')+'</div></div>';
+  document.getElementById('sheet-clubs').textContent = clubsText(d);
+  const notes = document.getElementById('sheet-notes');
+  const cleanNotes = (d.notes || '').replace(/\s*Run by \d+ hiking club\(s\):[^.]*\.?/i, '').trim();
+  notes.textContent = cleanNotes; notes.style.display = cleanNotes ? 'block' : 'none';
+
+  // details panel
+  document.getElementById('details-panel').style.display = 'none';
+  const e = UserState.getEntry(d.id);
+  document.getElementById('detail-date').value = e.date || '';
+  document.getElementById('detail-note').value = e.note || '';
+  renderDetailPhotos(e.photos || []);
+
+  syncActionButtons(d.id);
+  sheetOverlay.style.opacity = '1'; sheetOverlay.style.pointerEvents = 'auto';
+  sheet.style.transform = 'translate(-50%,0)';
+}
+function closeSheet() {
+  sheetOverlay.style.opacity = '0'; sheetOverlay.style.pointerEvents = 'none';
+  sheet.style.transform = 'translate(-50%,105%)';
+  currentDest = null;
+}
+sheetOverlay.addEventListener('click', closeSheet);
+
+function syncActionButtons(id) {
+  const status = UserState.statusOf(id);
+  const v = document.getElementById('btn-visited'), w = document.getElementById('btn-wishlist');
+  v.style.borderColor = '#27ae60';
+  v.style.background = status === 'visited' ? '#27ae60' : '#fff';
+  v.style.color = status === 'visited' ? '#fff' : '#27ae60';
+  w.style.borderColor = '#d4a017';
+  w.style.opacity = status === 'visited' ? '0.45' : '1';
+  w.style.background = status === 'wishlist' ? '#f1c40f' : '#fff';
+  w.style.color = status === 'wishlist' ? '#7a5c00' : '#d4a017';
+}
+
+document.getElementById('btn-visited').addEventListener('click', () => {
+  if (!currentDest) return;
+  const nowVisited = UserState.toggleVisited(currentDest.id);
+  showToast(nowVisited ? '✓ Visited +1 🎉' : 'Marked as not visited');
+});
+document.getElementById('btn-wishlist').addEventListener('click', () => {
+  if (!currentDest) return;
+  if (UserState.isVisited(currentDest.id)) { showToast("You've already been here"); return; }
+  const nowWish = UserState.toggleWishlist(currentDest.id);
+  showToast(nowWish ? '☆ Added to wishlist' : 'Removed from wishlist');
 });
 
-// Clear button
-document.getElementById('clear-btn').addEventListener('click', () => {
-  activeCat = 'ALL';
-  activeProv = 'ALL';
-  activeMarzGeom = null;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  document.querySelector('.filter-btn[data-cat="ALL"]').classList.add('active');
-  document.getElementById('prov-select').value = 'ALL';
-  if (selectedMarz && marzLayer) { marzLayer.resetStyle(selectedMarz); selectedMarz = null; }
-  map.setView([40.18, 44.95], 7);
-  applyFilters();
+// details
+document.getElementById('details-toggle').addEventListener('click', () => {
+  const p = document.getElementById('details-panel');
+  p.style.display = p.style.display === 'block' ? 'none' : 'block';
 });
+let pendingPhotos = [];
+function renderDetailPhotos(photos) {
+  pendingPhotos = photos.slice();
+  const wrap = document.getElementById('detail-photos');
+  wrap.innerHTML = pendingPhotos.map(src => '<img src="'+src+'">').join('');
+}
+document.getElementById('detail-photo-input').addEventListener('change', e => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => downscaleImage(reader.result, 640, dataUrl => {
+    pendingPhotos = [dataUrl]; // keep one photo to stay within localStorage limits
+    document.getElementById('detail-photos').innerHTML = '<img src="'+dataUrl+'">';
+  });
+  reader.readAsDataURL(file);
+  e.target.value = '';
+});
+function downscaleImage(dataUrl, maxW, cb) {
+  const img = new Image();
+  img.onload = () => {
+    const scale = Math.min(1, maxW / img.width);
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    try { cb(c.toDataURL('image/jpeg', 0.7)); } catch (err) { cb(dataUrl); }
+  };
+  img.onerror = () => cb(dataUrl);
+  img.src = dataUrl;
+}
+document.getElementById('details-save').addEventListener('click', () => {
+  if (!currentDest) return;
+  const res = UserState.setDetails(currentDest.id, {
+    date: document.getElementById('detail-date').value || null,
+    note: document.getElementById('detail-note').value || '',
+    photos: pendingPhotos
+  });
+  showToast(res.saved ? 'Details saved' : 'Saved (photo too large to keep)');
+  if (!res.saved) { UserState.setDetails(currentDest.id, { photos: [] }); renderDetailPhotos([]); }
+});
+
+/* ═══════════════ TOAST ═══════════════ */
+let toastTimer = null;
+function showToast(text) {
+  const t = document.getElementById('toast');
+  t.textContent = text; t.style.display = 'block';
+  t.style.animation = 'none'; requestAnimationFrame(() => { t.style.animation = 'toast-in .25s ease'; });
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.style.display = 'none'; }, 1700);
+}
+
+/* ═══════════════ STATS (computed live from data + state) ═══════════════ */
+function computeStats() {
+  const st = UserState.getState();
+  let visited = 0, wishlist = 0, rareVisited = 0;
+  const byCat = {}, byProv = {};
+  CAT_ORDER.forEach(c => byCat[c] = { total:0, visited:0 });
+  const visitedList = [];
+  let highestDest = null;
+  DESTINATIONS.forEach(d => {
+    if (!byCat[d.category]) byCat[d.category] = { total:0, visited:0 };
+    byCat[d.category].total++;
+    const prov = primaryProvince(d);
+    if (!byProv[prov]) byProv[prov] = { total:0, visited:0 };
+    byProv[prov].total++;
+    if (d.elevation && (!highestDest || d.elevation > highestDest.elevation)) highestDest = d;
+    const e = st[d.id];
+    if (e && e.visited) {
+      visited++; byCat[d.category].visited++; byProv[prov].visited++;
+      visitedList.push(d);
+      if ((d.popularity || 0) <= 1) rareVisited++;
+    } else if (e && e.wishlist) wishlist++;
+  });
+  const provincesTouched = PROVINCES.filter(p => byProv[p] && byProv[p].visited > 0).length;
+  const visitedHighest = !!(highestDest && st[highestDest.id] && st[highestDest.id].visited);
+  return { total: DESTINATIONS.length, visited, wishlist, rareVisited,
+    byCat, byProv, provincesTouched, provincesTotal: PROVINCES.length,
+    visitedList, highestDest, visitedHighest };
+}
+
+/* ═══════════════ BADGES ═══════════════ */
+function cv(s, cat) { return (s.byCat[cat] || { visited:0 }).visited; }
+const BADGE_DEFS = [
+  { id:'first-steps', emoji:'🥾', color:'#2f3e46', name:'First Steps', desc:'You checked in your very first destination — the journey begins.', have:s=>s.visited, need:1, unit:'destination' },
+  { id:'first-summit', emoji:'🏔', color:'#4a90d9', name:'First Summit', desc:'You reached your first mountain peak in Armenia.', have:s=>cv(s,'Mountains & Peaks'), need:1, unit:'peak' },
+  { id:'roof-of-armenia', emoji:'👑', color:'#2f6fb0', name:'Roof of Armenia', desc:'You stood on Armenia’s highest summit — Mount Aragats.', have:s=>s.visitedHighest?1:0, need:1, unit:'summit' },
+  { id:'ten-peaks', emoji:'⛰', color:'#4a90d9', name:'10 Peaks', desc:'Ten summits conquered. You’re a real mountaineer now.', have:s=>cv(s,'Mountains & Peaks'), need:10, unit:'peaks' },
+  { id:'fortress-hunter', emoji:'🏰', color:'#e67e22', name:'Fortress Hunter', desc:'Five castles & fortresses explored.', have:s=>cv(s,'Castles & Fortresses'), need:5, unit:'fortresses' },
+  { id:'pilgrim', emoji:'⛪', color:'#8e44ad', name:'Pilgrim', desc:'Five monasteries visited on your travels.', have:s=>cv(s,'Monasteries'), need:5, unit:'monasteries' },
+  { id:'waterfall-chaser', emoji:'💦', color:'#1abc9c', name:'Waterfall Chaser', desc:'Ten waterfalls chased down.', have:s=>cv(s,'Waterfalls'), need:10, unit:'waterfalls' },
+  { id:'rare-explorer', emoji:'🧭', color:'#b5533c', name:'Rare Explorer', desc:'Three off-the-beaten-path spots most hikers never reach.', have:s=>s.rareVisited, need:3, unit:'rare spots' },
+  { id:'province-explorer', emoji:'🗺', color:'#16a085', name:'Province Explorer', desc:'You’ve set foot in five different provinces.', have:s=>s.provincesTouched, need:5, unit:'provinces' }
+];
+function earnedBadges(stats) { return BADGE_DEFS.filter(b => b.have(stats) >= b.need); }
+function nextBadge(stats) {
+  const locked = BADGE_DEFS.filter(b => b.have(stats) < b.need);
+  if (!locked.length) return null;
+  // closest to completion
+  locked.sort((a,b) => (b.have(stats)/b.need) - (a.have(stats)/a.need));
+  const b = locked[0];
+  const remaining = b.need - b.have(stats);
+  return { emoji:b.emoji, name:b.name, need: remaining + ' more ' + b.unit };
+}
+
+/* ═══════════════ CHALLENGES ═══════════════ */
+function computeChallenges(stats) {
+  const list = [];
+  function catCh(cat, reward) { const c = stats.byCat[cat] || { visited:0, total:0 }; return { name:'All '+c.total+' '+cat, visited:c.visited, total:c.total, reward }; }
+  list.push(catCh('Waterfalls', '💦 Waterfall Chaser'));
+  list.push(catCh('Monasteries', '⛪ Pilgrim'));
+  list.push(catCh('Castles & Fortresses', '🏰 Fortress Hunter'));
+  ['Vayots Dzor','Tavush','Syunik'].forEach(p => {
+    const c = stats.byProv[p] || { visited:0, total:0 };
+    list.push({ name:'Conquer '+p, visited:c.visited, total:c.total, reward:'🏆 '+p+' Master' });
+  });
+  const gegham = DESTINATIONS.filter(d => /gegham/i.test(d.name));
+  const gv = gegham.filter(d => UserState.isVisited(d.id)).length;
+  list.push({ name:'Peaks of the Gegham Mountains', visited:gv, total:gegham.length, reward:'⛰ Geghama Ridge Runner' });
+  return list.map(c => ({ ...c, pct: c.total ? Math.round(c.visited / c.total * 100) : 0 }));
+}
+
+/* ═══════════════ LEVEL / TITLE ═══════════════ */
+function levelInfo(visited) {
+  const tiers = [
+    { min:0, title:'Newcomer' }, { min:1, title:'Wanderer' }, { min:5, title:'Explorer' },
+    { min:15, title:'Trailblazer' }, { min:30, title:'Pathfinder' }, { min:60, title:'Mountaineer' }, { min:120, title:'Legend' }
+  ];
+  let idx = 0; tiers.forEach((t, i) => { if (visited >= t.min) idx = i; });
+  return { title: tiers[idx].title, level: idx + 1 };
+}
+
+/* ═══════════════ PROGRESS STRIP ═══════════════ */
+function updateProgress() {
+  const s = computeStats();
+  const pct = s.total ? Math.round((s.visited / s.total) * 1000) / 10 : 0;
+  document.getElementById('progress-label').textContent = pct + '% of Armenia explored';
+  document.getElementById('progress-count').textContent = s.visited + ' / ' + s.total;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  const lv = levelInfo(s.visited);
+  document.getElementById('journey-level').textContent = '🏅 ' + lv.title + ' · Level ' + lv.level;
+}
+
+/* ═══════════════ JOURNEY VIEW ═══════════════ */
+function seasonOfDate(dateStr) {
+  const m = new Date(dateStr).getMonth() + 1;
+  if (m === 12 || m <= 2) return 'Winter';
+  if (m <= 5) return 'Spring';
+  if (m <= 8) return 'Summer';
+  return 'Autumn';
+}
+function renderJourney() {
+  const s = computeStats();
+  const pct = s.total ? Math.round((s.visited / s.total) * 1000) / 10 : 0;
+  const r = 88, circ = 2 * Math.PI * r, dash = circ * pct / 100;
+  const earned = earnedBadges(s), nb = nextBadge(s);
+
+  // by category (data order)
+  const catRows = CAT_ORDER.map(cat => {
+    const c = s.byCat[cat] || { visited:0, total:0 };
+    const p = c.total ? Math.round(c.visited / c.total * 100) : 0;
+    return '<div class="bar-row"><div class="bar-ico" style="background:'+CAT_COLORS[cat]+'">'+CAT_ICONS[cat]+'</div>'
+      + '<div class="bar-main"><div class="bar-head"><span class="nm">'+cat+'</span><span class="ct">'+c.visited+'/'+c.total+'</span></div>'
+      + '<div class="mini-track"><div style="width:'+p+'%;background:'+CAT_COLORS[cat]+'"></div></div></div></div>';
+  }).join('');
+
+  // by province (canonical + any extras that have destinations), sorted by completion
+  const provKeys = PROVINCES.slice();
+  Object.keys(s.byProv).forEach(p => { if (!provKeys.includes(p)) provKeys.push(p); });
+  const provRows = provKeys.map(p => {
+    const c = s.byProv[p] || { visited:0, total:0 };
+    return { name:p, visited:c.visited, total:c.total, pct: c.total ? Math.round(c.visited / c.total * 100) : 0 };
+  }).filter(p => p.total > 0).sort((a,b) => b.pct - a.pct || b.total - a.total)
+    .map(p => '<div class="prov-row"><div class="prov-name">'+p.name+'</div>'
+      + '<div class="mini-track" style="flex:1;"><div style="width:'+p.pct+'%;background:var(--accent-b)"></div></div>'
+      + '<div class="prov-ct">'+p.visited+'/'+p.total+'</div></div>').join('');
+
+  // highlights
+  const highest = s.visitedList.filter(d => d.elevation).sort((a,b) => b.elevation - a.elevation)[0];
+  const diffRank = { Easy:1, 'Easy/Medium':2, Medium:3, Moderate:3.5, Hard:4 };
+  const rankOf = d => { const k = Object.keys(diffRank).find(x => (d.difficulty||'').startsWith(x)); return k ? diffRank[k] : 0; };
+  const toughest = s.visitedList.filter(d => d.difficulty).sort((a,b) => rankOf(b) - rankOf(a))[0];
+  const rare = s.visitedList.filter(d => (d.popularity||0) <= 1).sort((a,b) => (a.popularity||0)-(b.popularity||0))[0];
+  const seasonCounts = {};
+  s.visitedList.forEach(d => { const e = UserState.getEntry(d.id); if (e.date) { const se = seasonOfDate(e.date); seasonCounts[se] = (seasonCounts[se]||0)+1; } });
+  const topSeason = Object.keys(seasonCounts).sort((a,b) => seasonCounts[b]-seasonCounts[a])[0];
+  const hl = [
+    { icon:'🏔', label:'Highest point reached', value: highest ? highest.name : '—', sub: highest ? highest.elevation.toLocaleString()+' m' : 'No summits yet' },
+    { icon:'💪', label:'Toughest hike', value: toughest ? toughest.name : '—', sub: toughest ? (toughest.difficulty+' · '+primaryProvince(toughest)) : 'Nothing logged yet' },
+    { icon:'🧭', label:'Off the beaten path', value: rare ? rare.name : '—', sub: rare ? ((rare.popularity||0) === 0 ? 'A hidden gem — no clubs run it' : 'Run by only 1 club') : 'Find a hidden gem' },
+    { icon:'🌸', label:'Most active season', value: topSeason || '—', sub: topSeason ? (seasonCounts[topSeason]+' of your visits') : 'Add dates to visits' }
+  ];
+  const hlCards = hl.map(h => '<div class="hl-card card"><div class="hl-ico">'+h.icon+'</div><div class="hl-lbl">'+h.label
+    +'</div><div class="hl-val">'+escapeHtml(h.value)+'</div><div class="hl-sub">'+escapeHtml(h.sub)+'</div></div>').join('');
+
+  // badges
+  let badgeChips = earned.map(b => '<div class="badge-chip"><div class="badge-disc" style="background:'+b.color+'">'+b.emoji+'</div><div class="badge-cap">'+b.name+'</div></div>').join('');
+  if (nb) badgeChips += '<div class="badge-chip"><div class="badge-disc locked">'+nb.emoji+'</div><div class="badge-cap locked">'+nb.need+'</div></div>';
+  if (!earned.length && !nb) badgeChips = '<div style="color:#999;font-size:0.78rem;">Start checking in to earn badges.</div>';
+
+  // challenges in progress
+  const challenges = computeChallenges(s);
+  const inProgress = challenges.filter(c => c.visited > 0 && c.visited < c.total);
+  const shownCh = (inProgress.length ? inProgress : challenges.slice(0, 3));
+  const chCards = shownCh.map(c => '<div class="chal-card card"><div class="chal-head"><span class="nm">'+c.name+'</span><span class="ct">'+c.visited+'/'+c.total+'</span></div>'
+    + '<div class="mini-track"><div style="width:'+c.pct+'%;background:var(--accent-b)"></div></div>'
+    + '<div class="chal-reward">Reward: '+c.reward+'</div></div>').join('');
+
+  document.getElementById('journey-body').innerHTML =
+    '<div class="ring-wrap"><svg width="200" height="200" viewBox="0 0 200 200" style="transform:rotate(-90deg);">'
+      + '<circle cx="100" cy="100" r="88" fill="none" stroke="#e8e8e8" stroke-width="14"></circle>'
+      + '<circle cx="100" cy="100" r="88" fill="none" stroke="var(--accent-b)" stroke-width="14" stroke-linecap="round" stroke-dasharray="'+dash.toFixed(1)+' '+circ.toFixed(1)+'"></circle></svg>'
+      + '<div class="center"><div class="ring-pct">'+pct+'%</div><div class="ring-sub">'+s.visited+' of '+s.total+' places</div></div></div>'
+    + '<div style="text-align:center;font-size:0.85rem;font-weight:700;color:#555;margin-bottom:20px;">Armenia explored</div>'
+    + '<div class="stat-chips">'
+      + '<div class="stat-chip"><div class="num">'+s.visited+'</div><div class="lbl">Visited</div></div>'
+      + '<div class="stat-chip"><div class="num">'+s.provincesTouched+'/'+s.provincesTotal+'</div><div class="lbl">Provinces</div></div>'
+      + '<div class="stat-chip"><div class="num">'+earned.length+'</div><div class="lbl">Badges</div></div>'
+      + '<div class="stat-chip"><div class="num">'+s.wishlist+'</div><div class="lbl">Wishlist</div></div></div>'
+    + '<div class="section"><div class="section-title">By category</div>'+catRows+'</div>'
+    + '<div class="section"><div class="section-title">By province</div>'+provRows+'</div>'
+    + '<div class="section"><div class="section-title">Highlights</div><div class="hl-grid">'+hlCards+'</div></div>'
+    + '<div class="section"><div class="section-title">Badges</div><div class="badges-strip">'+badgeChips+'</div></div>'
+    + '<div class="section"><div class="section-title">Challenges in progress</div>'+chCards+'</div>';
+}
+
+/* ═══════════════ CHALLENGES + PROFILE (stubs) ═══════════════ */
+function renderChallenges() {
+  const s = computeStats();
+  const challenges = computeChallenges(s).sort((a,b) => b.pct - a.pct);
+  const cards = challenges.map(c => '<div class="chal-card card"><div class="chal-head"><span class="nm">'+c.name+'</span><span class="ct">'+c.visited+'/'+c.total+'</span></div>'
+    + '<div class="mini-track"><div style="width:'+c.pct+'%;background:var(--accent-b)"></div></div>'
+    + '<div class="chal-reward">Reward: '+c.reward+'</div></div>').join('');
+  document.getElementById('challenges-body').innerHTML =
+    '<div class="section" style="padding-top:16px;"><div class="section-title">Your live challenges</div>'+cards
+    + '<div class="placeholder" style="padding:24px 4px 8px;"><p>A full challenges hub — curated routes, seasonal quests and leaderboards — is coming soon.</p></div></div>';
+}
+function renderProfile() {
+  const s = computeStats();
+  const lv = levelInfo(s.visited);
+  document.getElementById('profile-body').innerHTML =
+    '<div class="placeholder"><div class="big">🧭</div><h2>Explorer</h2>'
+    + '<p>'+lv.title+' · Level '+lv.level+'</p>'
+    + '<p style="color:#aaa;">'+s.visited+' visited · '+s.wishlist+' on wishlist</p>'
+    + '<p style="margin-top:14px;color:#aaa;">Sign-in, custom profiles and syncing across devices are on the way. For now your check-ins are saved on this device.</p>'
+    + '<button class="ghost-btn" id="reset-btn">Reset all my check-ins</button></div>';
+  document.getElementById('reset-btn').addEventListener('click', () => {
+    if (!confirm('Clear all your visited/wishlist check-ins on this device?')) return;
+    try { localStorage.removeItem('discover-armenia:user-state:v1'); } catch (e) {}
+    location.reload();
+  });
+}
+
+/* ═══════════════ BADGE UNLOCK DETECTION ═══════════════ */
+let earnedIds = new Set(earnedBadges(computeStats()).map(b => b.id));
+let badgeQueue = [];
+function showBadgeModal(badge) {
+  document.getElementById('badge-icon').textContent = badge.emoji;
+  document.getElementById('badge-icon').style.background = 'linear-gradient(135deg,'+badge.color+',#2f3e46)';
+  document.getElementById('badge-name').textContent = badge.name;
+  document.getElementById('badge-desc').textContent = badge.desc;
+  launchConfetti();
+  document.getElementById('badge-modal').style.display = 'flex';
+}
+function launchConfetti() {
+  const layer = document.getElementById('confetti-layer');
+  layer.innerHTML = '';
+  const colors = ['#e8a33d','#f1c40f','#27ae60','#4a90d9','#e67e22','#8e44ad'];
+  for (let i = 0; i < 28; i++) {
+    const p = document.createElement('div');
+    p.style.cssText = 'position:absolute;top:-20px;left:'+(Math.random()*100)+'%;width:8px;height:12px;background:'
+      + colors[i % colors.length] + ';opacity:0.9;animation:confetti-fall '+(1.4+Math.random()*0.9)+'s ease-in '+(Math.random()*0.4)+'s forwards;';
+    layer.appendChild(p);
+  }
+}
+document.getElementById('badge-dismiss').addEventListener('click', () => {
+  document.getElementById('badge-modal').style.display = 'none';
+  if (badgeQueue.length) { const next = badgeQueue.shift(); setTimeout(() => showBadgeModal(next), 250); }
+});
+
+/* ═══════════════ REACT TO STATE CHANGES (single source of truth) ═══════════════ */
+UserState.onChange(({ id }) => {
+  refreshMarker(id);
+  applyFilters();
+  updateProgress();
+  if (currentDest && currentDest.id === id) syncActionButtons(id);
+  if (document.getElementById('view-journey').classList.contains('active')) renderJourney();
+
+  // badge unlocks
+  const stats = computeStats();
+  const newlyEarned = earnedBadges(stats).filter(b => !earnedIds.has(b.id));
+  earnedIds = new Set(earnedBadges(stats).map(b => b.id));
+  if (newlyEarned.length) {
+    const modalOpen = document.getElementById('badge-modal').style.display === 'flex';
+    if (modalOpen) badgeQueue.push(...newlyEarned);
+    else { showBadgeModal(newlyEarned[0]); badgeQueue.push(...newlyEarned.slice(1)); }
+  }
+});
+
+/* ═══════════════ NAVIGATION ═══════════════ */
+const VIEWS = ['map','journey','challenges','profile'];
+function showView(name) {
+  VIEWS.forEach(v => {
+    document.getElementById('view-'+v).classList.toggle('active', v === name);
+    document.querySelector('.nav-item[data-view="'+v+'"]').classList.toggle('active', v === name);
+  });
+  if (name === 'map') setTimeout(() => map.invalidateSize(), 60);
+  if (name === 'journey') renderJourney();
+  if (name === 'challenges') renderChallenges();
+  if (name === 'profile') renderProfile();
+}
+document.getElementById('bottom-nav').addEventListener('click', e => {
+  const b = e.target.closest('.nav-item'); if (!b) return;
+  showView(b.dataset.view);
+});
+
+/* ═══════════════ INIT ═══════════════ */
+updateProgress();
+applyFilters();
+setTimeout(() => map.invalidateSize(), 150);
 </script>
 </body>
 </html>

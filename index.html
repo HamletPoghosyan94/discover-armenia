@@ -416,7 +416,21 @@ function clubsText(d) {
 }
 
 /* ═══════════════ MAP ═══════════════ */
-const map = L.map('map', { zoomControl:true }).setView([40.18, 44.95], 7);
+// This is an Armenia-only product: lock panning to Armenia + a minimum zoom, and
+// (below, in loadCountryBorder) mask out everything beyond the border so neighbouring
+// countries don't add noise.
+const ARMENIA_BOUNDS = L.latLngBounds([38.55, 43.05], [41.50, 47.00]);
+const MASK_COLOR = '#eef0f3';   // veil drawn over neighbouring countries
+const MASK_OPACITY = 0.62;      // 1 = fully hidden; lower = neighbours more visible
+const map = L.map('map', {
+  zoomControl: true,
+  minZoom: 7,
+  maxBounds: ARMENIA_BOUNDS,
+  maxBoundsViscosity: 0.9
+}).setView([40.18, 44.95], 7);
+// Frame the whole country (used on load and whenever filters are cleared).
+function resetMapView() { map.fitBounds(ARMENIA_BOUNDS); }
+resetMapView();
 
 const TILE_THEMES = {
   relief: { layers: [
@@ -469,7 +483,7 @@ function deselectMarz(resetView) {
   selectedMarz = null; activeMarzGeom = null; activeProv = 'ALL';
   document.getElementById('prov-select').value = 'ALL';
   applyFilters();
-  if (resetView) map.setView([40.18,44.95], 7);
+  if (resetView) resetMapView();
 }
 // Find the marz polygon that contains a latlng (used for interior map clicks).
 function marzAt(latlng) {
@@ -539,10 +553,39 @@ map.on('click', (e) => {
       setTimeout(() => { statusEl.style.display = 'none'; }, 4000); }
   });
 })();
+// Extract the outer ring(s) of a country GeoJSON (handles Feature/FeatureCollection,
+// Polygon/MultiPolygon) as [lon,lat] rings.
+function outerRings(geojson) {
+  const geoms = [];
+  if (geojson.type === 'FeatureCollection') geojson.features.forEach(f => geoms.push(f.geometry));
+  else if (geojson.type === 'Feature') geoms.push(geojson.geometry);
+  else geoms.push(geojson);
+  const rings = [];
+  geoms.forEach(g => {
+    if (!g) return;
+    if (g.type === 'Polygon') rings.push(g.coordinates[0]);
+    else if (g.type === 'MultiPolygon') g.coordinates.forEach(poly => rings.push(poly[0]));
+  });
+  return rings;
+}
 (function loadCountryBorder() {
   fetch('https://raw.githubusercontent.com/georgique/world-geojson/develop/countries/armenia.json')
     .then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(geojson => { L.geoJSON(geojson, { style:{ color:'#1a3a5c', weight:3, opacity:0.85, fillOpacity:0, lineJoin:'round' }, interactive:false }).addTo(map); })
+    .then(geojson => {
+      // Mask: a world-covering polygon with Armenia punched out as holes, so a
+      // translucent veil sits over everything outside the border — neighbouring
+      // countries stay faintly visible (context) but de-emphasised. Leaflet's default
+      // fillRule 'evenodd' makes the country shape a clean hole regardless of winding.
+      const holes = outerRings(geojson).map(ring => ring.map(c => [c[1], c[0]])); // [lat,lon]
+      const world = [[-85, -190], [-85, 190], [85, 190], [85, -190]];
+      if (holes.length) {
+        L.polygon([world, ...holes], {
+          stroke: false, fill: true, fillColor: MASK_COLOR, fillOpacity: MASK_OPACITY, interactive: false
+        }).addTo(map).bringToBack();
+      }
+      // Crisp country outline on top of the mask edge.
+      L.geoJSON(geojson, { style:{ color:'#1a3a5c', weight:2.5, opacity:0.9, fill:false, lineJoin:'round' }, interactive:false }).addTo(map);
+    })
     .catch(err => console.warn('Country border fetch failed:', err.message));
 })();
 
@@ -657,7 +700,7 @@ document.getElementById('prov-select').addEventListener('change', e => {
     if (bounds) map.fitBounds(bounds, { padding:[30,30] });
     else { const pts = markers.filter(m => m._destData.province.split('/').some(p => p.trim() === activeProv));
       if (pts.length) map.fitBounds(L.featureGroup(pts).getBounds().pad(0.3)); }
-  } else map.setView([40.18,44.95], 7);
+  } else resetMapView();
   applyFilters();
 });
 document.getElementById('search').addEventListener('input', e => { searchTerm = e.target.value.trim().toLowerCase(); applyFilters(); });

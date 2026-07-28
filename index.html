@@ -82,6 +82,11 @@
   .marz-tooltip { background:rgba(255,255,255,0.92); border:1px solid #ccc; border-radius:6px;
     padding:4px 8px; font-size:0.78rem; font-weight:700; color:#333; box-shadow:0 2px 6px rgba(0,0,0,0.15); pointer-events:none; }
   .marz-tooltip::before { display:none; }
+  /* Make the whole province polygon clickable (not just its thin border stroke).
+     Leaflet defaults interactive paths to visiblePainted, so a fill-opacity:0 marz
+     is only clickable on its outline. Markers live in a higher pane, so they keep
+     their own clicks — this only catches clicks on otherwise-empty province area. */
+  #map path.leaflet-interactive { pointer-events: all; }
 
   /* ── Bottom sheet ── */
   #sheet-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:1900;
@@ -446,6 +451,39 @@ const STYLE_HOVER    = { color:'#1a5c9e', weight:2.5, opacity:0.9, fillOpacity:0
 const STYLE_SELECTED = { color:'#c0392b', weight:3,   opacity:1,   fillOpacity:0.14, fillColor:'#e74c3c' };
 let selectedMarz = null, marzLayer = null;
 
+// Select a marz: highlight it, sync the dropdown, spatially filter pins, zoom to it.
+function selectMarzLayer(layer) {
+  if (selectedMarz && selectedMarz !== layer) marzLayer.resetStyle(selectedMarz);
+  layer.setStyle(STYLE_SELECTED); layer.bringToFront(); selectedMarz = layer;
+  const name = layer._marzName;
+  activeMarzGeom = layer.feature.geometry; activeProv = name;
+  const opt = [...document.querySelectorAll('#prov-select option')].find(o => o.value === name || o.text === name);
+  document.getElementById('prov-select').value = opt ? opt.value : 'ALL';
+  applyFilters();
+  const bounds = PROV_BOUNDS[name];
+  if (bounds) map.fitBounds(bounds, { padding:[30,30] });
+  else map.fitBounds(layer.getBounds().pad(0.15));
+}
+function deselectMarz(resetView) {
+  if (selectedMarz && marzLayer) marzLayer.resetStyle(selectedMarz);
+  selectedMarz = null; activeMarzGeom = null; activeProv = 'ALL';
+  document.getElementById('prov-select').value = 'ALL';
+  applyFilters();
+  if (resetView) map.setView([40.18,44.95], 7);
+}
+// Find the marz polygon that contains a latlng (used for interior map clicks).
+function marzAt(latlng) {
+  let found = null;
+  if (marzLayer) marzLayer.eachLayer(l => {
+    if (!found && l.feature && pointInGeometry(latlng.lat, latlng.lng, l.feature.geometry)) found = l;
+  });
+  return found;
+}
+function toggleMarz(layer) {
+  if (selectedMarz === layer) deselectMarz(true);
+  else selectMarzLayer(layer);
+}
+
 function initMarzLayer(geojsonData, nameGetter) {
   if (marzLayer) map.removeLayer(marzLayer);
   marzLayer = L.geoJSON(geojsonData, {
@@ -453,40 +491,25 @@ function initMarzLayer(geojsonData, nameGetter) {
     filter: f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'),
     onEachFeature(feature, layer) {
       const name = normalizeProvName(nameGetter(feature));
+      layer._marzName = name;
       layer.bindTooltip('<b>'+name+'</b>', { permanent:false, sticky:true, className:'marz-tooltip', direction:'center' });
       layer.on({
         mouseover() { if (layer !== selectedMarz) layer.setStyle(STYLE_HOVER); },
         mouseout()  { if (layer !== selectedMarz) marzLayer.resetStyle(layer); },
-        click(e) {
-          if (selectedMarz && selectedMarz !== layer) marzLayer.resetStyle(selectedMarz);
-          if (selectedMarz === layer) {
-            marzLayer.resetStyle(layer); selectedMarz = null;
-            activeMarzGeom = null; activeProv = 'ALL';
-            document.getElementById('prov-select').value = 'ALL';
-            map.setView([40.18,44.95], 7); applyFilters();
-          } else {
-            layer.setStyle(STYLE_SELECTED); layer.bringToFront(); selectedMarz = layer;
-            activeMarzGeom = feature.geometry; activeProv = name;
-            const opt = [...document.querySelectorAll('#prov-select option')].find(o => o.value === name || o.text === name);
-            document.getElementById('prov-select').value = opt ? opt.value : 'ALL';
-            applyFilters();
-            const bounds = PROV_BOUNDS[name];
-            if (bounds) map.fitBounds(bounds, { padding:[30,30] });
-            else map.fitBounds(layer.getBounds().pad(0.15));
-          }
-          L.DomEvent.stopPropagation(e);
-        }
+        // Fires when the click lands on the polygon outline/fill directly.
+        click(e) { toggleMarz(layer); L.DomEvent.stopPropagation(e); }
       });
     }
   }).addTo(map);
 }
-map.on('click', () => {
-  if (selectedMarz && marzLayer) {
-    marzLayer.resetStyle(selectedMarz); selectedMarz = null;
-    activeMarzGeom = null; activeProv = 'ALL';
-    document.getElementById('prov-select').value = 'ALL';
-    applyFilters();
-  }
+// Map background clicks: Leaflet's overlay <svg> is pointer-events:none, so a click
+// inside a province (not on its thin outline, and not on a marker) reaches the map,
+// not the polygon. Resolve which marz was clicked by point-in-polygon so the whole
+// province area selects/zooms/highlights. Marker clicks do NOT reach here.
+map.on('click', (e) => {
+  const layer = marzAt(e.latlng);
+  if (layer) toggleMarz(layer);
+  else if (selectedMarz) deselectMarz(true);
 });
 (function loadMarzBorders() {
   const statusEl = document.getElementById('marz-status');

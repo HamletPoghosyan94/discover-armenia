@@ -421,7 +421,7 @@ function clubsText(d) {
 // countries don't add noise.
 const ARMENIA_BOUNDS = L.latLngBounds([38.55, 43.05], [41.50, 47.00]);
 const MASK_COLOR = '#eef0f3';   // veil drawn over neighbouring countries
-const MASK_OPACITY = 0.62;      // 1 = fully hidden; lower = neighbours more visible
+const MASK_OPACITY = 0.82;      // 1 = fully hidden; lower = neighbours more visible
 const map = L.map('map', {
   zoomControl: true,
   minZoom: 7,
@@ -527,11 +527,19 @@ map.on('click', (e) => {
 });
 (function loadMarzBorders() {
   const statusEl = document.getElementById('marz-status');
-  const query = '[out:json][timeout:55];area["ISO3166-1"="AM"]->.a;relation["boundary"="administrative"]["admin_level"="4"](area.a);out body;>;out skel qt;';
+  // Show approximate borders immediately so province click/selection works from the
+  // first second — Overpass can be slow or unavailable. We upgrade to precise OSM
+  // borders once (if) they arrive, preserving any province the user already selected.
+  initMarzLayer(FALLBACK_GEOJSON, f => f.properties.name);
+
+  const query = '[out:json][timeout:25];area["ISO3166-1"="AM"]->.a;relation["boundary"="administrative"]["admin_level"="4"](area.a);out body;>;out skel qt;';
   const MIRRORS = ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://lz4.overpass-api.de/api/interpreter'];
   function postMirror(url) {
-    return fetch(url, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'data='+encodeURIComponent(query) })
-      .then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 9000); // fail fast to the next mirror
+    return fetch(url, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'data='+encodeURIComponent(query), signal: ctrl.signal })
+      .then(r => { clearTimeout(timer); if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .catch(e => { clearTimeout(timer); throw e; });
   }
   function tryNext(idx) {
     if (idx >= MIRRORS.length) return Promise.reject(new Error('All mirrors failed'));
@@ -544,11 +552,13 @@ map.on('click', (e) => {
       (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') &&
       f.properties && f.properties['admin_level'] === '4');
     if (features.length === 0) throw new Error('No marz features');
+    const prevName = selectedMarz ? selectedMarz._marzName : null; // preserve selection across the swap
     initMarzLayer({ type:'FeatureCollection', features }, f => f.properties['name:en'] || f.properties.name);
+    if (prevName) { let match = null; marzLayer.eachLayer(l => { if (l._marzName === prevName) match = l; }); if (match) selectMarzLayer(match); }
     if (statusEl) statusEl.style.display = 'none';
   }).catch(err => {
-    console.warn('Marz fetch failed, using fallback:', err.message);
-    initMarzLayer(FALLBACK_GEOJSON, f => f.properties.name);
+    // Keep the approximate borders already on screen (province click still works).
+    console.warn('Marz OSM fetch failed, keeping approximate borders:', err.message);
     if (statusEl) { statusEl.textContent = '⚠ Approximate borders'; statusEl.style.color = '#e67e22';
       setTimeout(() => { statusEl.style.display = 'none'; }, 4000); }
   });

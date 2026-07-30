@@ -254,8 +254,8 @@
       <div id="marz-status" class="map-overlay">⏳ Loading province borders…</div>
       <div id="state-legend" class="map-overlay"><span>✓ Visited</span><span>☆ Wishlist</span><span class="muted">○ New</span></div>
       <div id="theme-switcher" class="map-overlay">
-        <button class="theme-btn active" data-theme="relief">🏔 Relief</button>
-        <button class="theme-btn" data-theme="topo">📐 Topo</button>
+        <button class="theme-btn" data-theme="relief">🏔 Relief</button>
+        <button class="theme-btn active" data-theme="topo">📐 Topo</button>
         <button class="theme-btn" data-theme="satellite">🛰 Satellite</button>
         <button class="theme-btn" data-theme="outdoor">🥾 Outdoor</button>
         <button class="theme-btn" data-theme="street">🗺 Street</button>
@@ -455,7 +455,7 @@ function setTheme(themeId) {
   theme.layers.forEach(cfg => { activeTileLayers.push(L.tileLayer(cfg.url, cfg.opts).addTo(map)); });
   document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === themeId));
 }
-setTheme('relief');
+setTheme('topo');
 document.querySelectorAll('.theme-btn').forEach(btn => btn.addEventListener('click', () => setTheme(btn.dataset.theme)));
 
 // ── Marz boundary layer (Overpass + mirrors, fallback polygons) ──

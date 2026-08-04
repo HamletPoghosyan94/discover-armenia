@@ -42,7 +42,7 @@ To regenerate `destinations.js`: read the master, keep rows that have Latitude, 
 - `Wikiloc (GPS)` / `OSM (Nominatim)` — precise matches for named peaks/lakes/monasteries.
 - `Wikiloc (village-approx)` / `OSM (… trailhead)` / `… approx-area` — approximate (village or trailhead near the feature).
 - Sources ending in **`— verify`** (~10) = a confident match whose province disagreed with the club's stated region; check before treating as exact.
-- **14 destinations remain uncoordinated** (Artsakh sites, unnamed alpine lakes, the Ijevan "Falcons trail", and a few obscure peaks/waterfalls: Qaghqar, Sharai, Mazra, Akhnabat). They aren't in OSM/GeoNames/Wikiloc under a searchable name — need a GPS track from the club's own trip page or a manual pin.
+- **Several destinations remain uncoordinated** (unnamed alpine lakes, the Ijevan "Falcons trail", and a few obscure peaks/waterfalls: Qaghqar, Sharai, Mazra, Akhnabat). They aren't in OSM/GeoNames/Wikiloc under a searchable name — need a GPS track from the club's own trip page or a manual pin.
 
 ## Deploy
 GitHub Pages, `main` branch root. Deploy = commit + `git push`. Pages rebuilds in ~1 min.

@@ -95,10 +95,25 @@
     background:#fff; border-radius:16px 16px 0 0; box-shadow:0 -6px 24px rgba(0,0,0,0.25);
     z-index:1901; max-height:82%; overflow-y:auto; transition:transform .3s ease; }
   #sheet .grabber { width:36px; height:4px; background:#ddd; border-radius:2px; margin:10px auto 4px; }
-  #sheet-photo { width:100%; height:150px; position:relative; display:flex; align-items:center; justify-content:center;
+  #sheet-photo { width:100%; height:180px; position:relative;
     background:linear-gradient(135deg,#e8eaf0,#d8dce4); overflow:hidden; }
-  #sheet-photo .emoji { font-size:2.6rem; opacity:0.35; }
-  #sheet-photo img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none; }
+  #carousel-track { display:flex; height:100%; overflow-x:auto; scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  #carousel-track::-webkit-scrollbar { display:none; }
+  .slide { position:relative; flex:0 0 100%; height:100%; scroll-snap-align:center;
+    display:flex; align-items:center; justify-content:center; }
+  .slide img { width:100%; height:100%; object-fit:cover; display:block; }
+  .slide .emoji { font-size:2.6rem; opacity:0.35; }
+  .slide .del { position:absolute; top:8px; left:8px; width:26px; height:26px; border:none; border-radius:50%;
+    background:rgba(0,0,0,0.55); color:#fff; font-size:13px; line-height:1; cursor:pointer; }
+  .slide .tag { position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,0.5); color:#fff;
+    font-size:0.56rem; font-weight:600; padding:2px 6px; border-radius:6px; letter-spacing:0.3px; }
+  #carousel-add { position:absolute; top:8px; right:8px; z-index:3; width:34px; height:34px; border:none;
+    border-radius:50%; background:rgba(0,0,0,0.55); color:#fff; font-size:20px; line-height:34px; cursor:pointer; padding:0; }
+  #carousel-dots { position:absolute; bottom:8px; left:50%; transform:translateX(-50%); display:flex; gap:5px; z-index:2; }
+  #carousel-dots .dot { width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.6);
+    box-shadow:0 0 3px rgba(0,0,0,0.5); transition:background .15s; }
+  #carousel-dots .dot.active { background:#fff; }
   .sheet-body { padding:14px 18px 20px; }
   #sheet-cat { display:inline-block; font-size:0.62rem; font-weight:700; text-transform:uppercase;
     letter-spacing:0.5px; border-radius:10px; padding:3px 9px; margin-bottom:8px; }
@@ -121,8 +136,6 @@
   #details-panel textarea { resize:vertical; min-height:52px; }
   #details-save { width:100%; padding:10px; border:none; border-radius:9px; background:var(--accent-a); color:#fff;
     font-weight:700; font-size:0.82rem; cursor:pointer; }
-  #detail-photos { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
-  #detail-photos img { width:54px; height:54px; object-fit:cover; border-radius:8px; border:1px solid #ddd; }
 
   /* ── Toast ── */
   #toast { position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:2400; background:#222; color:#fff;
@@ -294,7 +307,12 @@
 <div id="sheet-overlay"></div>
 <div id="sheet">
   <div class="grabber"></div>
-  <div id="sheet-photo"><span class="emoji"></span><img alt=""></div>
+  <div id="sheet-photo">
+    <div id="carousel-track"></div>
+    <div id="carousel-dots"></div>
+    <button id="carousel-add" title="Add photos">＋</button>
+    <input type="file" id="carousel-file" accept="image/*" multiple hidden>
+  </div>
   <div class="sheet-body">
     <div id="sheet-cat"></div>
     <div id="sheet-name"></div>
@@ -312,9 +330,6 @@
       <input type="date" id="detail-date">
       <label>Note</label>
       <textarea id="detail-note" placeholder="How was it? Trail conditions, tips…"></textarea>
-      <label>Photos</label>
-      <div id="detail-photos"></div>
-      <input type="file" id="detail-photo-input" accept="image/*" style="font-size:0.72rem;margin-bottom:10px;">
       <button id="details-save">Save details</button>
     </div>
   </div>
@@ -343,6 +358,7 @@
 
 <script src="destinations.js"></script>
 <script src="state.js"></script>
+<script src="photos.js"></script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
  * Discover Armenia — single-page exploration app.
@@ -716,11 +732,13 @@ document.getElementById('prov-select').addEventListener('change', e => {
 });
 document.getElementById('search').addEventListener('input', e => { searchTerm = e.target.value.trim().toLowerCase(); applyFilters(); });
 
-/* ═══════════════ WIKIPEDIA IMAGES (preserved, now in the sheet) ═══════════════ */
+/* ═══════════════ WIKIPEDIA STOCK IMAGE (shown as the first carousel slide) ═══════════════ */
+// Resolves cb(src) with a usable image URL, or cb(null). We preload the image and
+// only report success once it actually loads, so a 404/blocked image never becomes
+// a broken slide.
 const wikiCache = {};
-function fetchWikiImage(name, imgEl) {
-  if (!imgEl) return;
-  if (wikiCache[name] !== undefined) { applyWikiImage(wikiCache[name], imgEl); return; }
+function fetchWikiImage(name, cb) {
+  if (wikiCache[name] !== undefined) { cb(wikiCache[name]); return; }
   const cleaned = name.replace(/\s*\([^)]*\)\s*/g, ' ')
     .replace(/\s+(hike approach|speleo hike|aerial tram|7 volcanoes|2-day trek|spring flowers|camping)\s*$/i, '')
     .replace(/\s+/g, ' ').trim();
@@ -728,16 +746,13 @@ function fetchWikiImage(name, imgEl) {
     .then(r => r.ok ? r.json() : Promise.reject())
     .then(data => {
       const src = (data.thumbnail && data.thumbnail.source) ? data.thumbnail.source.replace(/\/\d+px-/, '/400px-') : null;
-      wikiCache[name] = src; applyWikiImage(src, imgEl);
+      if (!src) { wikiCache[name] = null; cb(null); return; }
+      const test = new Image();
+      test.onload = () => { wikiCache[name] = src; cb(src); };
+      test.onerror = () => { wikiCache[name] = null; cb(null); };
+      test.src = src;
     })
-    .catch(() => { wikiCache[name] = null; });
-}
-function applyWikiImage(src, imgEl) {
-  if (!src) return;
-  // Only apply if the sheet still shows the same destination
-  if (imgEl.dataset.for && currentDest && imgEl.dataset.for !== currentDest.id) return;
-  imgEl.onload = () => { imgEl.style.display = 'block'; };
-  imgEl.src = src;
+    .catch(() => { wikiCache[name] = null; cb(null); });
 }
 
 /* ═══════════════ BOTTOM SHEET ═══════════════ */
@@ -747,11 +762,7 @@ let currentDest = null;
 
 function openSheet(d) {
   currentDest = d;
-  const img = document.querySelector('#sheet-photo img');
-  const ph = document.querySelector('#sheet-photo .emoji');
-  ph.textContent = CAT_ICONS[d.category] || '📍';
-  img.style.display = 'none'; img.src = ''; img.dataset.for = d.id;
-  fetchWikiImage(d.name, img);
+  openCarousel(d);
 
   const cat = document.getElementById('sheet-cat');
   cat.textContent = d.category;
@@ -774,7 +785,6 @@ function openSheet(d) {
   const e = UserState.getEntry(d.id);
   document.getElementById('detail-date').value = e.date || '';
   document.getElementById('detail-note').value = e.note || '';
-  renderDetailPhotos(e.photos || []);
 
   syncActionButtons(d.id);
   sheetOverlay.style.opacity = '1'; sheetOverlay.style.pointerEvents = 'auto';
@@ -816,23 +826,94 @@ document.getElementById('details-toggle').addEventListener('click', () => {
   const p = document.getElementById('details-panel');
   p.style.display = p.style.display === 'block' ? 'none' : 'block';
 });
-let pendingPhotos = [];
-function renderDetailPhotos(photos) {
-  pendingPhotos = photos.slice();
-  const wrap = document.getElementById('detail-photos');
-  wrap.innerHTML = pendingPhotos.map(src => '<img src="'+src+'">').join('');
-}
-document.getElementById('detail-photo-input').addEventListener('change', e => {
-  const file = e.target.files && e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => downscaleImage(reader.result, 640, dataUrl => {
-    pendingPhotos = [dataUrl]; // keep one photo to stay within localStorage limits
-    document.getElementById('detail-photos').innerHTML = '<img src="'+dataUrl+'">';
+document.getElementById('details-save').addEventListener('click', () => {
+  if (!currentDest) return;
+  UserState.setDetails(currentDest.id, {
+    date: document.getElementById('detail-date').value || null,
+    note: document.getElementById('detail-note').value || ''
   });
-  reader.readAsDataURL(file);
-  e.target.value = '';
+  showToast('Details saved');
 });
+
+/* ═══════════════ PHOTO CAROUSEL (stock Wikipedia photo + user uploads) ═══════════════ */
+// Photos are stored in IndexedDB (photos.js) keyed by destination id. The photo
+// area is a scroll-snap carousel: an optional stock photo first, then the user's
+// uploads, each swipeable, with dots, an add button, and per-photo delete.
+let carouselWiki = null;   // stock image src (or null)
+let carouselPhotos = [];   // user photo data-URLs
+
+function openCarousel(d) {
+  carouselWiki = null; carouselPhotos = [];
+  buildSlides(d); // placeholder immediately; the two async sources fill in below
+  fetchWikiImage(d.name, src => { if (currentDest && currentDest.id === d.id) { carouselWiki = src; buildSlides(d); } });
+  if (window.PhotoStore) PhotoStore.get(d.id).then(list => { if (currentDest && currentDest.id === d.id) { carouselPhotos = list; buildSlides(d); } });
+}
+function buildSlides(d) {
+  const track = document.getElementById('carousel-track');
+  const emoji = CAT_ICONS[d.category] || '📍';
+  let html = '';
+  if (carouselWiki) html += '<div class="slide"><img src="'+carouselWiki+'" alt=""><span class="tag">stock photo</span></div>';
+  carouselPhotos.forEach((src, i) => {
+    html += '<div class="slide"><img src="'+src+'" alt=""><button class="del" data-i="'+i+'" title="Remove photo">✕</button></div>';
+  });
+  if (!carouselWiki && !carouselPhotos.length) html += '<div class="slide"><span class="emoji">'+emoji+'</span></div>';
+  track.innerHTML = html;
+  buildDots();
+  track.scrollLeft = 0;
+}
+function buildDots() {
+  const track = document.getElementById('carousel-track');
+  const n = track.querySelectorAll('.slide').length;
+  document.getElementById('carousel-dots').innerHTML =
+    n > 1 ? Array.from({ length: n }, (_, i) => '<span class="dot'+(i === 0 ? ' active' : '')+'"></span>').join('') : '';
+}
+function updateDots() {
+  const track = document.getElementById('carousel-track');
+  if (!track.clientWidth) return;
+  const idx = Math.round(track.scrollLeft / track.clientWidth);
+  document.querySelectorAll('#carousel-dots .dot').forEach((dot, i) => dot.classList.toggle('active', i === idx));
+}
+document.getElementById('carousel-track').addEventListener('scroll', updateDots);
+
+// Add photos (multiple)
+document.getElementById('carousel-add').addEventListener('click', () => document.getElementById('carousel-file').click());
+document.getElementById('carousel-file').addEventListener('change', e => {
+  const files = [...(e.target.files || [])];
+  e.target.value = '';
+  if (!files.length || !currentDest) return;
+  if (!window.PhotoStore || !PhotoStore.available()) { showToast('Photos not supported on this device'); return; }
+  const id = currentDest.id;
+  Promise.all(files.map(f => new Promise(res => {
+    const reader = new FileReader();
+    reader.onload = () => downscaleImage(reader.result, 1000, res);
+    reader.onerror = () => res(null);
+    reader.readAsDataURL(f);
+  }))).then(urls => {
+    const good = urls.filter(Boolean);
+    if (!good.length) { showToast('Could not read image'); return; }
+    PhotoStore.add(id, good).then(list => {
+      if (currentDest && currentDest.id === id) {
+        const firstNew = (carouselWiki ? 1 : 0) + (list.length - good.length);
+        carouselPhotos = list; buildSlides(currentDest);
+        const track = document.getElementById('carousel-track');
+        track.scrollLeft = firstNew * track.clientWidth; updateDots();
+      }
+      showToast(good.length > 1 ? good.length + ' photos added' : 'Photo added');
+    }).catch(() => showToast('Could not save photos'));
+  });
+});
+
+// Delete a user photo
+document.getElementById('carousel-track').addEventListener('click', e => {
+  const del = e.target.closest('.del');
+  if (!del || !currentDest) return;
+  const id = currentDest.id, i = +del.dataset.i;
+  PhotoStore.remove(id, i).then(list => {
+    if (currentDest && currentDest.id === id) { carouselPhotos = list; buildSlides(currentDest); }
+    showToast('Photo removed');
+  });
+});
+
 function downscaleImage(dataUrl, maxW, cb) {
   const img = new Image();
   img.onload = () => {
@@ -840,21 +921,11 @@ function downscaleImage(dataUrl, maxW, cb) {
     const c = document.createElement('canvas');
     c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    try { cb(c.toDataURL('image/jpeg', 0.7)); } catch (err) { cb(dataUrl); }
+    try { cb(c.toDataURL('image/jpeg', 0.72)); } catch (err) { cb(dataUrl); }
   };
   img.onerror = () => cb(dataUrl);
   img.src = dataUrl;
 }
-document.getElementById('details-save').addEventListener('click', () => {
-  if (!currentDest) return;
-  const res = UserState.setDetails(currentDest.id, {
-    date: document.getElementById('detail-date').value || null,
-    note: document.getElementById('detail-note').value || '',
-    photos: pendingPhotos
-  });
-  showToast(res.saved ? 'Details saved' : 'Saved (photo too large to keep)');
-  if (!res.saved) { UserState.setDetails(currentDest.id, { photos: [] }); renderDetailPhotos([]); }
-});
 
 /* ═══════════════ TOAST ═══════════════ */
 let toastTimer = null;
